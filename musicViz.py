@@ -3,7 +3,7 @@
 musicViz.py - a tool that brings better music visualization to Nothing Phones!
 https://github.com/Aleks-Levet/better-nothing-music-visualizer
 
-Copyright (C) 2024  Aleks Levet (aka. SebiAi)
+Copyright (C) 2024  Aleks Levet and SebiAi
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
