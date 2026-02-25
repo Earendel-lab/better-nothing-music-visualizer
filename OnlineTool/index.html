@@ -695,8 +695,6 @@
             <p>This webpage allows you to run my amazing script <strong>IN 3 FUCKING STEPS.</strong> (sorry if you don't like the word fuck)</p>
         </div>
 
-        <div id="statusMessage" class="status-message"></div>
-
         <!-- Steps: each step is a boxed panel; stacks on mobile, horizontal on desktop -->
         <div class="steps">
             <div class="step-box" id="stepUpload">
@@ -759,6 +757,7 @@
                     <button class="process-button" id="processButton" disabled>
                         Process Audio
                     </button>
+                    <div id="statusMessage" class="status-message"></div>
                 </div>
                 <!-- Download Section -->
                 <div class="section" style="margin-bottom: 30px;">
@@ -777,47 +776,6 @@
 
         <!-- Terminal Output -->
         <div class="terminal" id="terminal"></div>
-    </div>
-
-    <!-- Help Modal -->
-    <button class="help-button" id="helpButton">?</button>
-    <div class="modal-overlay" id="helpModal">
-        <div class="modal">
-            <button class="modal-close" id="closeModal">&times;</button>
-            <h2>Help</h2>
-
-            <h3>How to Use</h3>
-            <ol>
-                <li><strong>Upload</strong> - Drag an MP3, OGG, WAV, or M4A file into the upload zone</li>
-                <li><strong>Select Phone</strong> - Choose your phone model from dropdown</li>
-                <li><strong>Pick Format</strong> - Select export format(s)</li>
-                <li><strong>Process</strong> - Click button and wait</li>
-                <li><strong>Download</strong> - Get your file(s)</li>
-            </ol>
-
-            <h3>Formats</h3>
-            <div class="feature-grid">
-                <div class="feature-item">
-                    <strong>NGlyph</strong>
-                    <span>For GlyphModder</span>
-                </div>
-                <div class="feature-item">
-                    <strong>CSV</strong>
-                    <span>Spreadsheet format</span>
-                </div>
-                <div class="feature-item">
-                    <strong>Compact</strong>
-                    <span>Binary format</span>
-                </div>
-                <div class="feature-item">
-                    <strong>Progress</strong>
-                    <span>Real-time feedback</span>
-                </div>
-            </div>
-
-            <h3>Info</h3>
-            <p>Works on Chrome, Firefox, Safari 14+, and Edge. All processing is local.</p>
-        </div>
     </div>
 
     <script src="musicviz.js"></script>
