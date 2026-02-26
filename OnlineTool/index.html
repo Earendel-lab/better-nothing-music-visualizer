@@ -55,12 +55,14 @@
         .step-box {
             background: #252525;
             padding: 18px;
-            border-radius: 10px;
+            border-radius: 25px;
             border: 1px solid #333;
             display: flex;
             flex-direction: column;
             gap: 12px;
             flex: 1 1 0;
+            max-width: 400px;
+            margin: auto;
         }
 
         .preset-description {
@@ -95,18 +97,10 @@
         }
 
         .section-title {
-            font-size: 1.3em;
+            font-size: 1.5em;
             font-weight: 600;
             color: #fff;
-            margin-bottom: 15px;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 8px;
-            color: #ccc;
-            font-weight: 500;
-            font-size: 0.95em;
+            margin-bottom: 5px;
         }
 
         .config-section,
@@ -122,20 +116,14 @@
 
         .export-options {
             padding: 15px;
-            margin-top: 15px;
-        }
-
-        .export-options-title {
-            font-weight: 600;
-            color: #ccc;
-            margin-bottom: 12px;
-            font-size: 0.95em;
+            margin-bottom: 0;
+            background-color: #111;
         }
 
         .checkbox-group {
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 10px;
         }
 
         .checkbox-label {
@@ -144,7 +132,7 @@
             gap: 8px;
             cursor: pointer;
             margin: 0;
-            color: #ccc;
+            color: #dadada;
         }
 
         .checkbox-label input {
@@ -199,6 +187,7 @@
             flex-direction: column;
             gap: 8px;
             margin-top: 12px;
+            max-width: 100%;
         }
 
         .preset-container {
@@ -299,6 +288,7 @@
 
         .download-zone {
             padding: 30px;
+            margin-bottom: -30px;
         }
 
         .download-zone-empty {
@@ -751,23 +741,20 @@
                 <input type="hidden" id="phoneKeyHidden">
 
                 <!-- Format Selection -->
-                <div class="config-section" style="margin-top: 6px;">
-                    <label>Output Format:</label>
-                    <div class="export-options">
-                        <div class="checkbox-group">
-                            <label class="checkbox-label">
-                                <input type="radio" name="outputFormat" id="formatNglyph" value="nglyph" checked>
-                                <span>NGlyph (.nglyph) - For GlyphModder</span>
-                            </label>
-                            <label class="checkbox-label">
-                                <input type="radio" name="outputFormat" id="formatCsv" value="csv">
-                                <span>CSV (.csv) - Cuz why not</span>
-                            </label>
-                            <label class="checkbox-label">
-                                <input type="radio" name="outputFormat" id="formatCompact" value="compact">
-                                <span>Compact (.musicviz) - Not useful</span>
-                            </label>
-                        </div>
+                <div class="export-options">
+                    <div class="checkbox-group">
+                        <label class="checkbox-label">
+                            <input type="radio" name="outputFormat" id="formatNglyph" value="nglyph" checked>
+                            <span>NGlyph (.nglyph) - For GlyphModder</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="radio" name="outputFormat" id="formatCsv" value="csv">
+                            <span>CSV (.csv) - Cuz why not</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="radio" name="outputFormat" id="formatCompact" value="compact">
+                            <span>Compact (.musicviz) - Not useful</span>
+                        </label>
                     </div>
                 </div>
 
