@@ -1,4 +1,8 @@
 # <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Travel%20and%20places/Fire.png" alt="Fire" width="35" height="35" />Better Nothing Music Visualizer
+
+## Importatnt Announcement
+I'm currently working with a developer to make an app, a special app that grabs the live audio stream from the android device and directly processes it into the glyphs. It will use the media projection feature, which sounds like a scary permission, but that's the only way to grab a high-quality audio stream from every app. that also means that you'll be able to visualize music playing through spotify, youtube music, and basically any music app you want, which means you don't have to manually process each file or only use local files! So yeah, we're moving from the simple Python script to a nice android app, so it will be way easier to use our algorithm!  
+
 ## <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Smilies/Thinking%20Face.png" alt="Thinking Face" width="25" height="25" /> Why does this exist?
 For a lot of people (including me), the *stock Glyph Music Visualiastion provided by Nothing* feels random.  
 Even if it technically isn’t, the visual response to music just isn’t very obvious. On top of that, the feature isn’t really using the full potential of the Glyph Interface. So that’s why I made my own music visualizer.
@@ -36,16 +40,8 @@ It then outputs a **glyphed OGG** file for playback in *Glyph Composer*, *Glyphi
 ## 📖 How to use?
 The usage is pretty simple and straightforward. Nevertheless, we made a detailed wiki page which explains the installation, usage, configuration files in detail and a troubleshooting section. You can also find out how to make new presets. [Just click here to see how to use **musicViz.py** as a python script](https://github.com/Aleks-Levet/better-nothing-music-visualizer/wiki/). You know what's cool? You can convert an unlimited number of files in bulk without any trouble!
 
-### If you want to just try the visualisation and you don't know coding / you're lazy:
-We have a **discord bot** that can easily run the script on any audio file for you! It's one file at a time only, but it's very simple to use and you just need your phone!
- * Go in the [***Custom Nothing Glyph Tools* Discord server**](https://discord.gg/EmcnHqDxZt) 
- * Use the `/glyphs list` command to see available presets and their description
- * Use the `/glyphs compose` command with your audio file and your preset name
- * Wait a couple of seconds
- * And voilà! Just download the file and play it in *Glyph Composer* or *Glyphify*!
-
 ### <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Musical%20Notes.png" alt="Musical Notes" width="30" height="30" /> Our Music App (coming soon):
-We are currently working on a **Music Player App** that can easily run the script on any audio file for you! The best part? It's very simple to use, you just need your phone and don't need to process it manually!
+We are also working on a potential **Music Player App** that can easily run the script on any audio file for you! The best part? It's very simple to use, you just need your phone and don't need to process it manually! (this is different than what you can see at the top of the readme file.) 
 
 **Planned features of the app:**
 - Nothing aesthetic
