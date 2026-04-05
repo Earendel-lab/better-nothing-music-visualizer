@@ -1,0 +1,15 @@
+## About
+
+This repository contains the source code for the Better Nothing Music Visualiser app.
+
+## How to Use
+
+1. Clone or download the repository
+2. Open the project in Android Studio
+3. Build and install the app on your device
+4. Grant required permissions (e.g., screen capture)
+5. Start the visualiser
+
+## Developer
+
+Developed by [Shivank Dan, Aleks Levet]
