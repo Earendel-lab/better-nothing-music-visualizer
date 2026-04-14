@@ -66,6 +66,9 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.animation.togetherWith
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.Shapes
@@ -80,6 +83,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -364,10 +368,10 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Tab {
-    Audio,
-    Glyphs,
-    About;
+private enum class Tab(val label: String) {
+    Audio("Audio"),
+    Glyphs("Glyphs"),
+    About("About");
 
     val menuId: Int
         get() = when (this) {
