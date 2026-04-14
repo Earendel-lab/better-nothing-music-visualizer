@@ -938,7 +938,6 @@ private fun StartStopButton(
 }
 
 @Composable
-@Composable
 private fun NativeBottomBar(
     selectedTab: Tab,
     onTabSelected: (Tab) -> Unit,
