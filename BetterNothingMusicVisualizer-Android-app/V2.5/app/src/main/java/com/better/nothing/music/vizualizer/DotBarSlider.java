@@ -1,4 +1,4 @@
-package com.betterglyph;
+package com.better.nothing.music.vizualizer;
 
 import android.content.Context;
 import android.graphics.Canvas;

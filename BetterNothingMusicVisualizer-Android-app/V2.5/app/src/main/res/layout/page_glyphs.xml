@@ -69,7 +69,7 @@
             android:layout_marginTop="14dp"/>
 
         <!-- Gamma slider -->
-        <com.betterglyph.DotSeekBar
+        <com.better.nothing.music.vizualizer.DotSeekBar
             android:id="@+id/seekGamma"
             android:layout_width="match_parent"
             android:layout_height="40dp"

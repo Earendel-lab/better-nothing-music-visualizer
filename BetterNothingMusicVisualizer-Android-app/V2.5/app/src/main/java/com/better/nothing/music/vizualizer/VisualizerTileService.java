@@ -1,4 +1,4 @@
-package com.betterglyph;
+package com.better.nothing.music.vizualizer;
 
 import android.app.PendingIntent;
 import android.content.Intent;

@@ -1,4 +1,4 @@
-package com.betterglyph;
+package com.better.nothing.music.vizualizer;
 
 import android.animation.ValueAnimator;
 import android.content.Context;

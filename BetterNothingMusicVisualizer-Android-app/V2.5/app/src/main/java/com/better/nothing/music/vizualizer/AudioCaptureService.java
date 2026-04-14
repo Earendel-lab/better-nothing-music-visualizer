@@ -1,4 +1,4 @@
-package com.betterglyph;
+package com.better.nothing.music.vizualizer;
 
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -110,7 +110,7 @@ public class AudioCaptureService extends Service {
     private static final float PYTHON_FREQ_MULTIPLIER = 4f;
     private static final float EPSILON = 0.000001f;
     private static final long MIN_SEND_MS = 16L;
-    private static final int MAX_LATENCY_COMPENSATION_MS = 250;
+    private static final int MAX_LATENCY_COMPENSATION_MS = 300;
     private static final float MIN_GAMMA = 0.40f;
     private static final float MAX_GAMMA = 3.00f;
     public  static final int GAMMA_SLIDER_STEPS = 260;

@@ -1,4 +1,4 @@
-package com.betterglyph;
+package com.better.nothing.music.vizualizer;
 
 import com.nothing.ketchum.Common;
 

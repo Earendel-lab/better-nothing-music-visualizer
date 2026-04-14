@@ -87,7 +87,7 @@
                     android:background="@drawable/bg_marker" android:layout_marginStart="6dp"/>
             </LinearLayout>
 
-            <com.betterglyph.DotSeekBar
+            <com.better.nothing.music.vizualizer.DotSeekBar
                 android:id="@+id/seekLatency"
                 android:layout_width="match_parent"
                 android:layout_height="40dp"
