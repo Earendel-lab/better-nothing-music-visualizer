@@ -1,0 +1,8 @@
+since v2.5:
+reduces apk size from 60mb to 8mb
+added 4a support
+updated presets of vizualization
+lots of app and code optimization (also done by hand too)
+ui tweaks and polishing
+app is now smoother
+custom fonts for the header
