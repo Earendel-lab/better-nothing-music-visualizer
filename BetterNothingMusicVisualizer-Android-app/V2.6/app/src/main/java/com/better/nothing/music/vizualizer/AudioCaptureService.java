@@ -880,7 +880,7 @@ public class AudioCaptureService extends Service {
 
     private VisualizerConfig loadVisualizerConfigFromZonesConfig(String presetKey)
             throws IOException, JSONException {
-        String rawJson = loadZonesConfigText();
+        String rawJson = loadZonesConfigText(this);
         JSONObject root = new JSONObject(rawJson);
         JSONObject preset = root.optJSONObject(presetKey);
 
@@ -906,9 +906,11 @@ public class AudioCaptureService extends Service {
         );
     }
 
-    private String loadZonesConfigText() throws IOException {
+    // 1. Changed to accept Context as a parameter
+    private static String loadZonesConfigText(Context context) throws IOException {
         InputStream in = null;
-        Context context = this; // Assuming this method resides in a Context-aware class
+
+        // 2. Removed "Context context = this;" because 'this' isn't allowed in static methods
 
         // 1. Try Assets (Primary location)
         try {
@@ -1297,6 +1299,7 @@ public class AudioCaptureService extends Service {
     }
 
     private static JSONObject loadZonesConfigRoot(Context context) throws IOException, JSONException {
+        // Explicitly call the static version using the Context provided
         return new JSONObject(loadZonesConfigText(context));
     }
 

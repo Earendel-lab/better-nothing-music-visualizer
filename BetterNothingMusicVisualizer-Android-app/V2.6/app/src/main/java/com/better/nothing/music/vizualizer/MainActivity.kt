@@ -685,8 +685,9 @@ private fun GlyphsScreen(
         GammaCard(gammaValue = gammaValue, onGammaChanged = onGammaChanged)
         Text(
             text = "Visualizer presets",
+            modifier = Modifier.padding(top = 20.dp), // Adds space above the text
             style = MaterialTheme.typography.headlineMedium,
-            color = Color.White,
+            color = Color(0xFFD2D2D2),
         )
         Row(
             modifier = Modifier
@@ -1149,32 +1150,35 @@ val NDotFontFamily = FontFamily(
     // If ndot55 is your lighter variant, you could add it here as FontWeight.Light
 )
 
+val NDot55FontFamily = FontFamily(
+    Font(resId = R.font.ndot55, weight = FontWeight.Normal)
+    // If ndot55 is your lighter variant, you could add it here as FontWeight.Light
+)
+
 @Composable
 private fun BetterVizTheme(content: @Composable () -> Unit) {
     val typography = Typography(
         // HEADERS
         displayLarge = TextStyle(
-            fontFamily = NDotFontFamily,
-            fontSize = 31.sp,
-            lineHeight = 41.sp,
+            fontFamily = NDot55FontFamily,
+            fontSize = 45.sp,
+            lineHeight = 55.sp,
             fontWeight = FontWeight.Normal
         ),
         headlineMedium = TextStyle(
             fontFamily = NDotFontFamily,
-            fontSize = 23.sp,
-            lineHeight = 30.sp,
+            fontSize = 30.sp,
+            lineHeight = 40.sp,
             fontWeight = FontWeight.Normal
         ),
 
         // SUB-HEADERS
         titleLarge = TextStyle(
-            fontFamily = NDotFontFamily,
             fontSize = 21.sp,
             lineHeight = 28.sp,
             fontWeight = FontWeight.Normal
         ),
         titleMedium = TextStyle(
-            fontFamily = NDotFontFamily,
             fontSize = 17.sp,
             lineHeight = 24.sp,
             fontWeight = FontWeight.Normal
