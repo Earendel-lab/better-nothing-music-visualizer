@@ -20,7 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """
 
-# VERSION 1.1.0 OF THE SCRIPT.
+# VERSION 1.2.0 OF THE SCRIPT.
 
 """
 /*/*/* NEW ANALYSIS PIPELINE!! */*/*/
@@ -756,6 +756,41 @@ def download_glyphmodder_to_cwd(overwrite: bool = False, attempts: int = 2, back
     print("[!] Could not obtain GlyphModder.py from SebiAI's GitHub.")
     return False
 
+def download_zones_config_to_cwd(overwrite: bool = False, attempts: int = 2, backoff: float = 1.0) -> bool:
+    """
+    Try to download zones.config from GitHub raw URLs into cwd.
+    If overwrite is False and a file already exists, do nothing.
+    Returns True on success, False otherwise.
+    """
+    target = os.path.join(os.getcwd(), "zones.config")
+    if os.path.isfile(target) and not overwrite:
+        # No need to print "already present" here as it's checked frequently
+        return True
+
+    url = "https://raw.githubusercontent.com/Aleks-Levet/better-nothing-music-visualizer/main/zones.config"
+    last_err = None
+    for attempt in range(1, attempts + 1):
+        try:
+            print(f"[+] Downloading zones.config from SebiAI's repo (attempt {attempt}) ...")
+            with urllib.request.urlopen(url, timeout=10) as resp:
+                if resp.status != 200:
+                    raise urllib.error.HTTPError(url, resp.status, "Non-200 response", resp.headers, None)
+                data = resp.read()
+            
+            tmp = target + ".tmp"
+            with open(tmp, "wb") as f:
+                f.write(data)
+            os.replace(tmp, target)
+            print(f"[+] Saved zones.config -> {target}")
+            return True
+        except Exception as e:
+            last_err = e
+            print(f"[!] Download attempt {attempt} failed: {e}")
+            time.sleep(backoff * attempt)
+    
+    print(f"[!] Failed to download zones.config: {last_err}")
+    return False
+
 # new helper: generate a short help message from zones.config
 def generate_help_from_zones(cfg_path="zones.config"):
     if not os.path.isfile(cfg_path):
@@ -804,190 +839,12 @@ def validate_amp_conf(amp_conf):
                 raise ValueError(f"amp.{k} must be numeric (got {repr(v)})")
     return coerced
 
-
-# ---------------- api ------------------
-# Relies on the standard pipeline: compute_raw_matrix -> normalize_to_quadratic -> apply_multiplier_only -> apply_zone_percent_mapping -> apply_decay_to_raw -> clip
-
-_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-
-class GlyphVisualizerAPI:
-    """
-    Simplified API for generating Nothing Phone glyph visualizer OGG files.
-    Uses the main processing pipeline from this module.
-    """
-
-    def __init__(self, zones_config_path: str = None):
-        if zones_config_path is None:
-            zones_config_path = os.path.join(_SCRIPT_DIR, "zones.config")
-        if not os.path.isfile(zones_config_path):
-            raise FileNotFoundError(f"zones.config not found at: {zones_config_path}")
-        self.zones_config_path = zones_config_path
-        self._load_config()
-
-    def _load_config(self):
-        with open(self.zones_config_path, "r", encoding="utf-8") as f:
-            self.raw_config = json.load(f)
-        self.global_amp = self.raw_config.get("amp")
-        if self.global_amp is None:
-            raise ValueError("zones.config must include a top-level 'amp' object")
-        raw_decay = self.raw_config.get("decay-alpha") or self.raw_config.get("decay_alpha")
-        self.global_decay = float(raw_decay) if raw_decay is not None else None
-        self.phone_configs = {
-            k: v for k, v in self.raw_config.items()
-            if k != "amp" and isinstance(v, dict)
-        }
-
-    def get_available_phones(self) -> list:
-        return list(self.phone_configs.keys())
-
-    def get_phone_info(self, phone_key: str) -> dict:
-        if phone_key not in self.phone_configs:
-            raise ValueError(f"Unknown phone key: {phone_key}")
-        conf = self.phone_configs[phone_key]
-        return {
-            "key": phone_key,
-            "description": conf.get("description", ""),
-            "phone_model": conf.get("phone_model", "UNKNOWN"),
-            "zone_count": len(conf.get("zones", []))
-        }
-
-    def _prepare_config(self, phone_key: str) -> dict:
-        if phone_key not in self.phone_configs:
-            raise ValueError(f"Unknown phone key: {phone_key}")
-        conf = dict(self.phone_configs[phone_key])
-        amp_conf = conf.get("amp") if conf.get("amp") is not None else self.global_amp
-        if amp_conf is None:
-            raise ValueError("Missing 'amp' configuration")
-        conf["amp"] = validate_amp_conf(amp_conf)
-        if "decay-alpha" in conf:
-            conf["decay_alpha"] = float(conf["decay-alpha"])
-        elif "decay_alpha" in conf:
-            conf["decay_alpha"] = float(conf["decay_alpha"])
-        elif self.global_decay is not None:
-            conf["decay_alpha"] = self.global_decay
-        else:
-            raise ValueError("Missing 'decay_alpha' configuration")
-        if "zones" not in conf or not isinstance(conf["zones"], list):
-            raise ValueError("Configuration missing 'zones' array")
-        return conf
-
-    def _process_audio(self, audio_path: str, conf: dict, out_path: str, output_format: str = 'nglyph') -> str:
-        """
-        Process audio using the new pipeline.
-        This function uses the optimized frequency-based processing pipeline.
-        """
-        fps = 60
-        phone_model = conf.get("phone_model")
-        decay_alpha = conf.get("decay_alpha")
-        zones = conf["zones"]
-        amp_conf = conf.get("amp")
-
-        samples, sr = load_audio_mono(audio_path)
-        
-        # NEW PIPELINE:
-        # 1. Extract unique frequencies from the preset
-        unique_freqs = extract_unique_frequencies(zones)
-        print(f"[+] Extracted {len(unique_freqs)} unique frequency range(s) from preset")
-        
-        # 2. Compute frequency analysis table (FFT only for selected frequencies, with multiplier and decay applied together)
-        freq_table, n_frames = compute_frequency_table(samples, sr, unique_freqs, fps, decay_alpha, amp_conf)
-        
-        # 3. Map analyzed frequencies to zones with percent conversion
-        linear_scaled = map_frequencies_to_zones(freq_table, unique_freqs, zones)
-        
-        # 4. Clip to 0-4095 brightness range
-        final = np.clip(np.round(linear_scaled), 0, 4095).astype(int)
-
-        # --- write NGlyph
-        author_rows = [",".join(map(str, row)) + "," for row in final]
-        ng = {
-            "VERSION": 1,
-            "PHONE_MODEL": phone_model,
-            "AUTHOR": author_rows,
-            "CUSTOM1": ["1-0", "1050-1"]
-        }
-        with open(out_path, "w", encoding="utf-8") as f:
-            json.dump(ng, f, indent=4)
-        return out_path
-
-    def generate_glyph_ogg(
-        self,
-        audio_path: str,
-        phone_model: str = "np1",
-        output_path: str = None,
-        title: str = None,
-        nglyph_only: bool = False
-    ) -> str:
-        """
-        Generate glyph OGG (or .nglyph if nglyph_only=True).
-        Simpler call signature and faster internals than the previous API.
-        """
-        if not os.path.isfile(audio_path):
-            raise FileNotFoundError(f"Audio file not found: {audio_path}")
-        conf = self._prepare_config(phone_model)
-        base_name = os.path.splitext(os.path.basename(audio_path))[0]
-        if title is None:
-            title = base_name
-
-        work_dir = tempfile.mkdtemp(prefix="glyph_viz_")
-        try:
-            nglyph_path = os.path.join(work_dir, f"{base_name}.nglyph")
-            self._process_audio(audio_path, conf, nglyph_path)
-
-            if nglyph_only:
-                if output_path is None:
-                    output_path = os.path.join(os.path.dirname(audio_path), f"{base_name}.nglyph")
-                shutil.copy2(nglyph_path, output_path)
-                return output_path
-
-            ogg_path = os.path.join(work_dir, f"{base_name}.ogg")
-            convert_to_ogg(audio_path, ogg_path)
-
-            # Ensure GlyphModder is available in work_dir
-            original_cwd = os.getcwd()
-            os.chdir(work_dir)
-            try:
-                download_glyphmodder_to_cwd(overwrite=False)
-            finally:
-                os.chdir(original_cwd)
-
-            run_glyphmodder_write(nglyph_path, ogg_path, title=title, cwd=work_dir)
-
-            # Find produced file and copy to output_path
-            composed_patterns = [
-                os.path.join(work_dir, f"{base_name}_fixed_composed.ogg"),
-                os.path.join(work_dir, f"{base_name}_composed.ogg"),
-            ]
-            composed_file = next((p for p in composed_patterns if os.path.isfile(p)), None)
-            if not composed_file:
-                raise RuntimeError(f"GlyphModder did not produce expected output. Check work_dir: {work_dir}")
-
-            if output_path is None:
-                output_path = os.path.join(os.path.dirname(audio_path), f"{base_name}_glyph.ogg")
-            shutil.copy2(composed_file, output_path)
-            return output_path
-        finally:
-            try:
-                shutil.rmtree(work_dir)
-            except Exception:
-                pass
-
-# Convenience wrapper (keeps previous simple-call behavior)
-def generate_glyph_ogg(
-    audio_path: str,
-    phone_model: str = "np1",
-    output_path: str = None,
-    title: str = None
-) -> str:
-    api = GlyphVisualizerAPI()
-    return api.generate_glyph_ogg(audio_path, phone_model, output_path, title)
-#-------------------api end-------------------
-
-
-
-
 # ------------------ entrypoint -----------------+-+-+-+-+-+-+-+-+-*-*-*-*-*-*-*-*-/*/*/*/*/*///
 if __name__ == "__main__":
+    
+    download_zones_config_to_cwd(overwrite=False) 
+    
+    
     # if script called with no args, show help generated from zones.config
     if len(sys.argv) == 1:
         cfg_path_hint = "zones.config"
@@ -1038,6 +895,7 @@ if __name__ == "__main__":
     # Attempt to pull GlyphModder.py into cwd if --update was requested
     if update_flag:
         try:
+            download_zones_config_to_cwd(overwrite=True)
             download_glyphmodder_to_cwd(overwrite=True)
         except Exception as e_download:
             print(f"[!] Warning: automatic GlyphModder fetch failed: {e_download}")
