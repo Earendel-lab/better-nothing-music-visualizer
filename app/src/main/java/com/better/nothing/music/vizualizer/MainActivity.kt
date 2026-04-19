@@ -18,9 +18,14 @@ import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.EaseOut
+import androidx.compose.animation.core.EaseOutQuart
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -34,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
@@ -476,27 +482,35 @@ private fun BetterVizApp(
                 label = "tab_content",
                 transitionSpec = {
                     val isMovingRight = targetState.ordinal > initialState.ordinal
-                    val animationDuration = 400
-                    val easing = EaseOut
+
+                    // Spring physics: No bounce, but very smooth deceleration
+                    val springSpec = spring<IntOffset>(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessLow
+                    )
+
+                    // Subtle scale and fade specs
+                    val fadeSpec = tween<Float>(durationMillis = 300)
+                    val scaleSpec = tween<Float>(durationMillis = 400, easing = EaseOutQuart)
 
                     if (isMovingRight) {
-                        (slideInHorizontally(
-                            initialOffsetX = { it },
-                            animationSpec = tween(animationDuration, easing = easing)
-                        ) + fadeIn(tween(animationDuration))) togetherWith
-                                slideOutHorizontally(
-                                    targetOffsetX = { -it },
-                                    animationSpec = tween(animationDuration, easing = easing)
-                                ) + fadeOut(tween(animationDuration))
+                        (slideInHorizontally(initialOffsetX = { it }, animationSpec = springSpec) +
+                                fadeIn(fadeSpec) +
+                                scaleIn(initialScale = 0.95f, animationSpec = scaleSpec))
+                            .togetherWith(
+                                slideOutHorizontally(targetOffsetX = { -it }, animationSpec = springSpec) +
+                                        fadeOut(fadeSpec) +
+                                        scaleOut(targetScale = 0.95f, animationSpec = scaleSpec)
+                            )
                     } else {
-                        (slideInHorizontally(
-                            initialOffsetX = { -it },
-                            animationSpec = tween(animationDuration, easing = easing)
-                        ) + fadeIn(tween(animationDuration))) togetherWith
-                                slideOutHorizontally(
-                                    targetOffsetX = { it },
-                                    animationSpec = tween(animationDuration, easing = easing)
-                                ) + fadeOut(tween(animationDuration))
+                        (slideInHorizontally(initialOffsetX = { -it }, animationSpec = springSpec) +
+                                fadeIn(fadeSpec) +
+                                scaleIn(initialScale = 0.95f, animationSpec = scaleSpec))
+                            .togetherWith(
+                                slideOutHorizontally(targetOffsetX = { it }, animationSpec = springSpec) +
+                                        fadeOut(fadeSpec) +
+                                        scaleOut(targetScale = 0.95f, animationSpec = scaleSpec)
+                            )
                     }.using(SizeTransform(clip = false))
                 },
                 modifier = Modifier.fillMaxSize()

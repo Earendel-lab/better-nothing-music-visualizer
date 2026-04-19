@@ -20,7 +20,7 @@ fun AboutScreen() {
         modifier = Modifier
             .fillMaxSize()
             .statusBarsPadding()
-            .padding(horizontal = 28.dp, vertical = 28.dp)
+            .padding(horizontal = 8.dp, vertical = 8.dp)
             .verticalScroll(scrollState),
         verticalArrangement = Arrangement.spacedBy(22.dp),
     ) {

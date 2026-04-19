@@ -45,8 +45,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -55,6 +58,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -283,6 +287,16 @@ val NDot55FontFamily = FontFamily(
     // If ndot55 is your lighter variant, you could add it here as FontWeight.Light
 )
 
+@Immutable
+data class AppSpacing(
+    val edge: Dp = 6.dp,       // Global screen side padding
+    val between: Dp = 12.dp,    // Vertical space between cards
+    val inner: Dp = 20.dp,      // Padding inside cards (Expressive style)
+    val buttonGap: Dp = 4.dp    // Gap between connected buttons
+)
+
+val LocalAppSpacing = staticCompositionLocalOf { AppSpacing() }
+
 @Composable
 fun BetterVizTheme(content: @Composable () -> Unit) {
     val typography = Typography(
@@ -325,25 +339,33 @@ fun BetterVizTheme(content: @Composable () -> Unit) {
             fontWeight = FontWeight.Medium
         ),
     )
+    CompositionLocalProvider(LocalAppSpacing provides AppSpacing()) {
+        MaterialTheme(
+            colorScheme = darkColorScheme(
+                background = Color.Black,
+                surface = Color(0xFF242222),
+                primary = Color(0xFFD8D3DA),
+                secondary = Color(0xFFB5F2B6),
+                onBackground = Color.White,
+                onSurface = Color.White,
+                onPrimary = Color(0xFF1C1A1D),
+                surfaceVariant = Color(0xFF3D3C41),
+            ),
+            shapes = Shapes(
+                extraLarge = RoundedCornerShape(32.dp),
+                large = RoundedCornerShape(28.dp),
+                medium = RoundedCornerShape(20.dp),
+                small = RoundedCornerShape(14.dp),
+            ),
+            typography = typography,
+            content = content,
+        )
+    }
+}
 
-    MaterialTheme(
-        colorScheme = darkColorScheme(
-            background = Color.Black,
-            surface = Color(0xFF242222),
-            primary = Color(0xFFD8D3DA),
-            secondary = Color(0xFFB5F2B6),
-            onBackground = Color.White,
-            onSurface = Color.White,
-            onPrimary = Color(0xFF1C1A1D),
-            surfaceVariant = Color(0xFF3D3C41),
-        ),
-        shapes = Shapes(
-            extraLarge = RoundedCornerShape(32.dp),
-            large = RoundedCornerShape(28.dp),
-            medium = RoundedCornerShape(20.dp),
-            small = RoundedCornerShape(14.dp),
-        ),
-        typography = typography,
-        content = content,
-    )
+// Helper object for clean code
+object BetterVizTheme {
+    val spacing: AppSpacing
+        @Composable
+        get() = LocalAppSpacing.current
 }

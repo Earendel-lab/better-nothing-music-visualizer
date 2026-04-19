@@ -1,6 +1,8 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     id 'com.android.application'
-    id 'org.jetbrains.kotlin.android'
+    id 'org.jetbrains.kotlin.plugin.compose'
 }
 
 android {
@@ -22,8 +24,6 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
         debug {
-            minifyEnabled true
-            shrinkResources true
             debuggable true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
@@ -33,17 +33,16 @@ android {
         compose true
     }
 
-    composeOptions {
-        kotlinCompilerExtensionVersion '1.5.14'
-    }
-
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = '17'
+    kotlin {
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_17)
+            // Change JVM_1_8 to JVM_11 or JVM_17 depending on your project needs
+        }
     }
 }
 
@@ -74,6 +73,9 @@ dependencies {
     // 7. Legacy Support (Only if your Service/Activity extends AppCompatActivity)
     // If you use 'ComponentActivity', you can likely remove appcompat too.
     implementation 'androidx.appcompat:appcompat:1.7.1'
+    implementation 'androidx.compose.foundation:foundation-layout:1.10.6'
+    implementation 'androidx.benchmark:benchmark-traceprocessor:1.4.1'
+    implementation 'androidx.compose.runtime:runtime:1.10.6'
 
     // 8. Debugging
     debugImplementation 'androidx.compose.ui:ui-tooling'
