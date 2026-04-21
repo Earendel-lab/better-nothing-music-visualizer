@@ -9,9 +9,15 @@
     <color name="text_primary">#F0F0F0</color>
     <color name="text_secondary">#888888</color>
     <color name="text_muted">#444444</color>
-    <color name="accent_green">#4ADE80</color>
+    <color name="accent_green">#147311</color>
     <color name="accent_red">#F87171</color>
+    <color name="nothing_red_primary">#EF4444</color>
+    <color name="nothing_red_bg">#000000</color>
+    <color name="nothing_red_surface">#0A0A0A</color>
+    <color name="nothing_red_surface_variant">#111111</color>
+    <color name="nothing_red_on">#F5F5F5</color>
     <color name="accent_white">#F0F0F0</color>
+
     <color name="preset_selected_bg">#F0F0F0</color>
     <color name="preset_unselected_bg">#1A1A1A</color>
     <color name="slider_active">#EEEEEE</color>

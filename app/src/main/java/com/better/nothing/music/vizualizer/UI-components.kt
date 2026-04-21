@@ -201,7 +201,9 @@ fun NativeBottomBar(
     val tabs = Tab.all
 
     NavigationBar(
-        modifier = Modifier.height(64.dp), // The magic number
+        modifier = Modifier
+            .height(64.dp) // The magic number
+            .padding(bottom = 16.dp), // Raise buttons up with bottom padding
         containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
         windowInsets = WindowInsets(0) // Prevents extra padding on gesture-nav phones
@@ -222,8 +224,8 @@ fun NativeBottomBar(
                     Icon(
                         imageVector = when (tab) {
                             Tab.Audio -> Icons.AutoMirrored.Filled.VolumeUp
-                            Tab.Glyphs -> Icons.Filled.Settings //we need to change this
-                            Tab.Settings -> Icons.Filled.GraphicEq
+                            Tab.Glyphs -> Icons.Filled.GraphicEq
+                            Tab.Settings -> Icons.Filled.Settings
                             Tab.About -> Icons.Filled.Info
                         },
                         contentDescription = tab.label
@@ -308,14 +310,16 @@ fun ExpressiveSlider(
     }
 }
 
+val NTypeFontFamily = FontFamily(
+    Font(R.font.ntype82)
+)
+
 val NDotFontFamily = FontFamily(
     Font(resId = R.font.ndot57, weight = FontWeight.Normal)
-    // If ndot55 is your lighter variant, you could add it here as FontWeight.Light
 )
 
 val NDot55FontFamily = FontFamily(
     Font(resId = R.font.ndot55, weight = FontWeight.Normal)
-    // If ndot55 is your lighter variant, you could add it here as FontWeight.Light
 )
 
 @Immutable
@@ -330,16 +334,49 @@ val LocalAppSpacing = staticCompositionLocalOf { AppSpacing() }
 
 @Composable
 fun BetterVizTheme(content: @Composable () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val prefs = context.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
+    val themeName = prefs.getString("selected_theme", "Normal") ?: "Normal"
+    val isNothingRed = themeName == "Nothing Red"
+    val fontName = prefs.getString("selected_font", "NDot") ?: "NDot"
+    val useNType = fontName == "NType"
+
+    val colorScheme = if (isNothingRed) {
+        androidx.compose.material3.darkColorScheme(
+            background = Color(0xFF000000),
+            surface = Color(0xFF0A0A0A),
+            primary = Color(0xFFEF4444),
+            secondary = Color(0xFFEF4444),
+            onBackground = Color(0xFFF5F5F5),
+            onSurface = Color(0xFFF5F5F5),
+            onPrimary = Color(0xFF000000),
+            surfaceVariant = Color(0xFF111111),
+            onSecondary = Color(0xFF000000)
+        )
+    } else {
+        androidx.compose.material3.darkColorScheme(
+            background = Color.Black,
+            surface = Color(0xFF242222),
+            primary = Color(0xFFD8D3DA),
+            secondary = Color(0xFFB5F2B6),
+            onBackground = Color.White,
+            onSurface = Color.White,
+            onPrimary = Color(0xFF1C1A1D),
+            surfaceVariant = Color(0xFF3D3C41),
+            onSecondary = Color.White
+        )
+    }
+
     val typography = Typography(
         // HEADERS
         displayLarge = TextStyle(
-            fontFamily = NDot55FontFamily,
+            fontFamily = if (useNType) NTypeFontFamily else NDot55FontFamily,
             fontSize = 45.sp,
             lineHeight = 55.sp,
             fontWeight = FontWeight.Normal
         ),
         headlineMedium = TextStyle(
-            fontFamily = NDotFontFamily,
+            fontFamily = if (useNType) NTypeFontFamily else NDotFontFamily,
             fontSize = 30.sp,
             lineHeight = 40.sp,
             fontWeight = FontWeight.Normal
@@ -371,17 +408,8 @@ fun BetterVizTheme(content: @Composable () -> Unit) {
         ),
     )
     CompositionLocalProvider(LocalAppSpacing provides AppSpacing()) {
-        MaterialTheme(
-            colorScheme = darkColorScheme(
-                background = Color.Black,
-                surface = Color(0xFF242222),
-                primary = Color(0xFFD8D3DA),
-                secondary = Color(0xFFB5F2B6),
-                onBackground = Color.White,
-                onSurface = Color.White,
-                onPrimary = Color(0xFF1C1A1D),
-                surfaceVariant = Color(0xFF3D3C41),
-            ),
+        androidx.compose.material3.MaterialTheme(
+            colorScheme = colorScheme,
             shapes = Shapes(
                 extraLarge = RoundedCornerShape(32.dp),
                 large = RoundedCornerShape(28.dp),
