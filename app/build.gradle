@@ -13,8 +13,8 @@ android {
         applicationId "com.better.nothing.music.vizualizer"
         minSdk 34
         targetSdk 36
-        versionCode 3
-        versionName '2.6'
+        versionCode 4
+        versionName '2.8'
     }
 
     buildTypes {

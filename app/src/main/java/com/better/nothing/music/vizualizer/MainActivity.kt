@@ -1,5 +1,43 @@
-//https://docs.google.com/document/d/1yW5VaqSjXN9lqe3_KvuxRvHq3PcurzPr4rwWDfRBJ7U/edit?tab=t.0
+/*
+////
+//////
+////////
+//////////
+////////////
+// TODO LIST HEREEEE:::::
+////////////////
 //https://taskweb.pages.dev/?board=mauv5VZ29Gw1vnbExSXb#
+////////////////
+//////////////
+////////////
+//////////
+////////
+//////
+////
+//
+
+///////////////////////////////////////////////////////////
+CHANGELOG HERE PLEASE: 2.7 TO 2.8:
+
+2.8 changes:
+- Removed legacy hardcoded preset fallback logic and old vocal/bass leftovers from the active runtime path.
+- Refactored AudioCaptureService so capture and preset processing are driven by zones.config without duplicated setup code.
+- Improved foreground/background service behavior, including cleaner lifecycle handling and quick settings tile refreshes.
+- Added live audio route monitoring with AudioDeviceCallback for proper Bluetooth, wired, and speaker hot swapping.
+- Fixed auto device memorization so the selected output updates without needing an app restart.
+- Fixed latency persistence so each audio route/device can save and restore its own latency value automatically.
+- Added a new Haptics tab with a vibration icon and placeholder page.
+- Cleaned up old settings/resource leftovers and restored the adaptive launcher background color resource.
+- Added fine controls to the latency compensation setting
+- Fixed colors
+- Added NType font
+- More bouncy and snappy animations
+- Added more haptics at good places
+
+///////////////////////////////////////////////////////////
+*/
+
+
 package com.better.nothing.music.vizualizer
 
 import android.Manifest
@@ -9,9 +47,14 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.media.projection.MediaProjectionManager
 import android.os.Bundle
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.service.quicksettings.TileService
 import android.util.Log
 import android.widget.Toast
@@ -22,7 +65,6 @@ import androidx.activity.viewModels
 import androidx.annotation.RequiresPermission
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
-import androidx.compose.animation.core.EaseOut
 import androidx.compose.animation.core.EaseOutQuart
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -42,16 +84,15 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -63,13 +104,18 @@ import kotlinx.coroutines.withContext
 // Promoted to internal so MainViewModel can reference it without reflection.
 
 enum class Tab(val label: String) {
-    Audio("Audio"), Glyphs("Glyphs"), Settings("Settings"), About("About");
+    Audio("Audio"), Glyphs("Glyphs"), Haptics("Haptics"), Settings("Settings"), About("About");
 
     companion object {
         // Allocated once at class-load time; never re-allocated during recomposition.
         val all: List<Tab> = entries
     }
 }
+
+private data class AudioRoute(
+    val storageKey: String,
+    val displayName: String,
+)
 
 // ─── ViewModel ────────────────────────────────────────────────────────────────
 //
@@ -105,7 +151,12 @@ internal class MainViewModel(application: Application) : AndroidViewModel(applic
     fun setLatencyMs(value: Int) {
         _latencyMs.value = value
         viewModelScope.launch(Dispatchers.IO) {
-            AudioCaptureService.saveLatencyCompensationMs(ctx, selectedDevice.value, value)
+            AudioCaptureService.saveLatencyCompensationMs(
+                ctx,
+                selectedDevice.value,
+                activeLatencyRouteKey(),
+                value
+            )
         }
     }
 
@@ -136,16 +187,27 @@ internal class MainViewModel(application: Application) : AndroidViewModel(applic
     private val _connectedDeviceName = MutableStateFlow<String?>(null)
     val connectedDeviceName = _connectedDeviceName.asStateFlow()
 
-    fun setAutoDeviceEnabled(enabled: Boolean) {
+    private val _connectedDeviceKey = MutableStateFlow<String?>(null)
+
+    private val _glyphTabEnabled = MutableStateFlow(true)
+    val glyphTabEnabled = _glyphTabEnabled.asStateFlow()
+
+    private val _hapticsTabEnabled = MutableStateFlow(true)
+    val hapticsTabEnabled = _hapticsTabEnabled.asStateFlow()
+
+    fun setAutoDeviceEnabled(enabled: Boolean): Int {
         _autoDeviceEnabled.value = enabled
         viewModelScope.launch(Dispatchers.IO) {
             ctx.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
                 .edit().putBoolean("auto_device_enabled", enabled).apply()
         }
+        return reloadLatencyForCurrentRoute()
     }
 
-    fun updateConnectedDevice(name: String?) {
+    fun updateConnectedDevice(routeKey: String?, name: String?): Int {
+        _connectedDeviceKey.value = routeKey
         _connectedDeviceName.value = name
+        return reloadLatencyForCurrentRoute()
     }
 
     // ── Init: all IO in parallel ──────────────────────────────────────────────
@@ -159,7 +221,11 @@ internal class MainViewModel(application: Application) : AndroidViewModel(applic
             // Load I/O in parallel using IO dispatcher
             launch(Dispatchers.IO) {
                 val gamma = AudioCaptureService.loadGamma(ctx)
-                val latency = AudioCaptureService.loadLatencyCompensationMs(ctx, device)
+                val latency = AudioCaptureService.loadLatencyCompensationMs(
+                    ctx,
+                    device,
+                    activeLatencyRouteKey()
+                )
                 val presets = AudioCaptureService.loadLatencyPresets(ctx)
                 val infos = AudioCaptureService.loadPresetInfos(ctx, device)
 
@@ -167,9 +233,11 @@ internal class MainViewModel(application: Application) : AndroidViewModel(applic
                 _gammaValue.value = gamma
                 _latencyMs.value = latency
                 _latencyPresets.value = presets
-                _presetInfos.value = infos
-                _autoDeviceEnabled.value = ctx.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
-                    .getBoolean("auto_device_enabled", true)
+                commitPresetInfos(infos)
+                val prefs = ctx.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
+                _autoDeviceEnabled.value = prefs.getBoolean("auto_device_enabled", true)
+                _glyphTabEnabled.value = prefs.getBoolean("glyph_tab_enabled", true)
+                _hapticsTabEnabled.value = prefs.getBoolean("haptics_tab_enabled", true)
             }
 
             startRunningStatePoller()
@@ -205,13 +273,6 @@ internal class MainViewModel(application: Application) : AndroidViewModel(applic
         }
     }
 
-    /** Persists latency compensation to SharedPreferences without blocking the main thread. */
-    fun persistLatency(clamped: Int) {
-        viewModelScope.launch(Dispatchers.IO) {
-            AudioCaptureService.saveLatencyCompensationMs(ctx, selectedDevice.value, clamped)
-        }
-    }
-
     /** Updates preset list in state and persists it; save is off main thread. */
     fun updateLatencyPresets(presets: List<Int>) {
         _latencyPresets.value = presets
@@ -224,6 +285,36 @@ internal class MainViewModel(application: Application) : AndroidViewModel(applic
     fun persistGamma(clamped: Float) {
         viewModelScope.launch(Dispatchers.IO) {
             AudioCaptureService.saveGamma(ctx, clamped)
+        }
+    }
+
+    fun reloadLatencyForCurrentRoute(): Int {
+        val latency = AudioCaptureService.loadLatencyCompensationMs(
+            ctx,
+            selectedDevice.value,
+            activeLatencyRouteKey()
+        )
+        _latencyMs.value = latency
+        return latency
+    }
+
+    private fun activeLatencyRouteKey(): String? {
+        return _connectedDeviceKey.value.takeIf { _autoDeviceEnabled.value }
+    }
+
+    fun setGlyphTabEnabled(enabled: Boolean) {
+        _glyphTabEnabled.value = enabled
+        viewModelScope.launch(Dispatchers.IO) {
+            ctx.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
+                .edit().putBoolean("glyph_tab_enabled", enabled).apply()
+        }
+    }
+
+    fun setHapticsTabEnabled(enabled: Boolean) {
+        _hapticsTabEnabled.value = enabled
+        viewModelScope.launch(Dispatchers.IO) {
+            ctx.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
+                .edit().putBoolean("haptics_tab_enabled", enabled).apply()
         }
     }
 
@@ -243,6 +334,10 @@ class MainActivity : ComponentActivity() {
     // viewModels() returns the same instance across configuration changes.
     private val viewModel: MainViewModel by viewModels()
 
+    private val audioManager by lazy {
+        getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    }
+
     private val projectionManager by lazy {
         getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
     }
@@ -253,15 +348,24 @@ class MainActivity : ComponentActivity() {
     private var pendingData: Intent? = null
     private var hasPendingToken = false
 
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val audioDeviceCallback = object : AudioDeviceCallback() {
+        override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) {
+            refreshConnectedAudioRoute()
+        }
+
+        override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>) {
+            refreshConnectedAudioRoute()
+        }
+    }
+
     private val serviceConnection = object : ServiceConnection {
         @RequiresPermission(Manifest.permission.RECORD_AUDIO)
         override fun onServiceConnected(name: ComponentName, binder: IBinder) {
             Log.d("BetterViz", "Service connected: $name")
             service = (binder as AudioCaptureService.LocalBinder).service
             bound = true
-            viewModel.updateConnectedDevice(service?.getCurrentDeviceName())
-            val detectedName = service?.getCurrentDeviceName()
-            Log.d("VizDebug", "Detected Device: $detectedName") // Check Logcat!
+            refreshConnectedAudioRoute()
             applyServiceSettings()
             if (hasPendingToken && pendingData != null) {
                 val data = pendingData ?: return
@@ -321,6 +425,8 @@ class MainActivity : ComponentActivity() {
                 val gammaValue     by viewModel.gammaValue.collectAsStateWithLifecycle()
                 val presets        by viewModel.presetInfos.collectAsStateWithLifecycle()
                 val selectedPreset by viewModel.selectedPreset.collectAsStateWithLifecycle()
+                val glyphTabEnabled by viewModel.glyphTabEnabled.collectAsStateWithLifecycle()
+                val hapticsTabEnabled by viewModel.hapticsTabEnabled.collectAsStateWithLifecycle()
 
                 BetterVizApp(
                     tab = tab,
@@ -336,10 +442,26 @@ class MainActivity : ComponentActivity() {
                     selectedPreset = selectedPreset,
                     onPresetSelected = ::onPresetSelected,
                     onToggleVisualizer = ::toggleVisualizer,
+                    onAutoDeviceToggle = ::onAutoDeviceToggle,
+                    glyphTabEnabled = glyphTabEnabled,
+                    hapticsTabEnabled = hapticsTabEnabled,
+                    onGlyphTabToggle = ::onGlyphTabToggle,
+                    onHapticsTabToggle = ::onHapticsTabToggle,
                     viewModel = viewModel,
                 )
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        audioManager.registerAudioDeviceCallback(audioDeviceCallback, mainHandler)
+        refreshConnectedAudioRoute()
+    }
+
+    override fun onStop() {
+        audioManager.unregisterAudioDeviceCallback(audioDeviceCallback)
+        super.onStop()
     }
 
     override fun onResume() {
@@ -347,6 +469,7 @@ class MainActivity : ComponentActivity() {
         // Single source of truth: push the real state into the ViewModel.
         // The poller will keep it in sync while the app is in the foreground.
         viewModel.setRunning(AudioCaptureService.isRunning())
+        refreshConnectedAudioRoute()
     }
 
     override fun onDestroy() {
@@ -363,8 +486,26 @@ class MainActivity : ComponentActivity() {
 
     private fun onLatencyChanged(value: Int) {
         viewModel.setLatencyMs(value)
-        viewModel.persistLatency(value)          // Dispatchers.IO — never blocks main
         service?.setLatencyCompensationMs(value)
+    }
+
+    private fun onAutoDeviceToggle(enabled: Boolean) {
+        val latency = viewModel.setAutoDeviceEnabled(enabled)
+        service?.setLatencyCompensationMs(latency)
+    }
+
+    private fun onGlyphTabToggle(enabled: Boolean) {
+        viewModel.setGlyphTabEnabled(enabled)
+        if (!enabled && viewModel.selectedTab.value == Tab.Glyphs) {
+            viewModel.selectTab(Tab.Audio)
+        }
+    }
+
+    private fun onHapticsTabToggle(enabled: Boolean) {
+        viewModel.setHapticsTabEnabled(enabled)
+        if (!enabled && viewModel.selectedTab.value == Tab.Haptics) {
+            viewModel.selectTab(Tab.Audio)
+        }
     }
 
     private fun onGammaChanged(value: Float) {
@@ -386,8 +527,11 @@ class MainActivity : ComponentActivity() {
             viewModel.setRunning(false)
             return
         }
-        // refreshPresets is now async/IO — safe to call from main thread.
-        if (viewModel.currentPreset().isBlank()) viewModel.refreshPresets()
+        if (viewModel.currentPreset().isBlank()) {
+            viewModel.refreshPresets()
+            Toast.makeText(this, "No preset is currently available", Toast.LENGTH_SHORT).show()
+            return
+        }
         requestProjection()
     }
 
@@ -411,8 +555,8 @@ class MainActivity : ComponentActivity() {
         val serviceIntent = Intent(this, AudioCaptureService::class.java).apply {
             putExtra(AudioCaptureService.EXTRA_PRESET_KEY, viewModel.currentPreset())
         }
-        if (!bound) bindService(serviceIntent, serviceConnection, BIND_AUTO_CREATE)
         ContextCompat.startForegroundService(this, serviceIntent)
+        if (!bound) bindService(serviceIntent, serviceConnection, BIND_AUTO_CREATE)
         if (bound && service != null) {
             applyServiceSettings()
             service?.startCapture(resultCode, data)
@@ -437,6 +581,15 @@ class MainActivity : ComponentActivity() {
         if (preset.isNotBlank()) service?.setPreset(preset)
     }
 
+    private fun refreshConnectedAudioRoute() {
+        val route = resolvePreferredAudioRoute()
+        val latency = viewModel.updateConnectedDevice(
+            routeKey = route?.storageKey,
+            name = route?.displayName ?: "Internal Speaker"
+        )
+        service?.setLatencyCompensationMs(latency)
+    }
+
     private fun stopEverything() {
         service?.stopCapture()
         if (bound) {
@@ -452,6 +605,83 @@ class MainActivity : ComponentActivity() {
             this,
             ComponentName(this, VisualizerTileService::class.java)
         )
+    }
+
+    private fun resolvePreferredAudioRoute(): AudioRoute? {
+        val outputs = audioManager
+            .getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            .filter(::isUsefulOutputRoute)
+
+        val preferredDevice = outputs.firstOrNull { it.isBluetoothOutput() }
+            ?: outputs.firstOrNull { it.isWiredOutput() }
+            ?: outputs.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+            ?: outputs.firstOrNull()
+
+        return preferredDevice?.toAudioRoute()
+    }
+}
+
+private fun isUsefulOutputRoute(device: AudioDeviceInfo): Boolean {
+    return when (device.type) {
+        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+        AudioDeviceInfo.TYPE_BLE_HEADSET,
+        AudioDeviceInfo.TYPE_BLE_SPEAKER,
+        AudioDeviceInfo.TYPE_BLE_BROADCAST,
+        AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+        AudioDeviceInfo.TYPE_WIRED_HEADSET,
+        AudioDeviceInfo.TYPE_USB_HEADSET,
+        AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> true
+        else -> false
+    }
+}
+
+private fun AudioDeviceInfo.isBluetoothOutput(): Boolean {
+    return type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP
+            || type == AudioDeviceInfo.TYPE_BLE_HEADSET
+            || type == AudioDeviceInfo.TYPE_BLE_SPEAKER
+            || type == AudioDeviceInfo.TYPE_BLE_BROADCAST
+}
+
+private fun AudioDeviceInfo.isWiredOutput(): Boolean {
+    return type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES
+            || type == AudioDeviceInfo.TYPE_WIRED_HEADSET
+            || type == AudioDeviceInfo.TYPE_USB_HEADSET
+}
+
+private fun AudioDeviceInfo.toAudioRoute(): AudioRoute {
+    val routeName = when (type) {
+        AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "Internal Speaker"
+        else -> productName?.toString()?.takeIf { it.isNotBlank() } ?: "Unknown Output"
+    }
+    val normalizedName = routeName.lowercase()
+        .replace(Regex("[^a-z0-9._-]+"), "_")
+        .trim('_')
+        .ifBlank { "unknown_output" }
+    val normalizedAddress = address
+        ?.lowercase()
+        ?.replace(Regex("[^a-z0-9._-]+"), "_")
+        ?.trim('_')
+        ?.takeIf { it.isNotBlank() }
+    val routeKey = listOf(type.toString(), normalizedAddress ?: normalizedName)
+        .joinToString("_")
+
+    return AudioRoute(
+        storageKey = routeKey,
+        displayName = routeName,
+    )
+}
+
+@Composable
+private fun rememberVisibleTabs(
+    glyphTabEnabled: Boolean,
+    hapticsTabEnabled: Boolean,
+): List<Tab> = remember(glyphTabEnabled, hapticsTabEnabled) {
+    buildList {
+        add(Tab.Audio)
+        if (glyphTabEnabled) add(Tab.Glyphs)
+        if (hapticsTabEnabled) add(Tab.Haptics)
+        add(Tab.Settings)
+        add(Tab.About)
     }
 }
 
@@ -473,10 +703,16 @@ private fun BetterVizApp(
     selectedPreset: String,
     onPresetSelected: (String) -> Unit,
     onToggleVisualizer: () -> Unit,
+    onAutoDeviceToggle: (Boolean) -> Unit,
+    glyphTabEnabled: Boolean,
+    hapticsTabEnabled: Boolean,
+    onGlyphTabToggle: (Boolean) -> Unit,
+    onHapticsTabToggle: (Boolean) -> Unit,
 ) {
     // Collect the new Device states
     val autoDeviceEnabled by viewModel.autoDeviceEnabled.collectAsStateWithLifecycle()
     val connectedDeviceName by viewModel.connectedDeviceName.collectAsStateWithLifecycle()
+    val visibleTabs = rememberVisibleTabs(glyphTabEnabled, hapticsTabEnabled)
 
     Scaffold(
         modifier = Modifier.fillMaxSize().background(Color.Black),
@@ -484,7 +720,13 @@ private fun BetterVizApp(
         floatingActionButton = {
             StartStopButton(running = isRunning, onClick = onToggleVisualizer)
         },
-        bottomBar = { NativeBottomBar(selectedTab = tab, onTabSelected = onTabSelected) },
+        bottomBar = {
+            NativeBottomBar(
+                selectedTab = tab,
+                visibleTabs = visibleTabs,
+                onTabSelected = onTabSelected
+            )
+        },
     ) { innerPadding ->
         Box(modifier = Modifier.fillMaxSize().padding(innerPadding).background(Color.Black)) {
             AnimatedContent(
@@ -533,7 +775,7 @@ private fun BetterVizApp(
                         latencyPresets = latencyPresets,
                         onLatencyPresetsChanged = onLatencyPresetsChanged,
                         autoDeviceEnabled = autoDeviceEnabled,
-                        onAutoDeviceToggle = viewModel::setAutoDeviceEnabled,
+                        onAutoDeviceToggle = onAutoDeviceToggle,
                         connectedDeviceName = connectedDeviceName,
                         )
 
@@ -557,7 +799,14 @@ private fun BetterVizApp(
                         }
                     }
 
-                    Tab.Settings -> SettingsScreen() // New Branch
+                    Tab.Haptics -> HapticsScreen()
+
+                    Tab.Settings -> SettingsScreen(
+                        glyphTabEnabled = glyphTabEnabled,
+                        hapticsTabEnabled = hapticsTabEnabled,
+                        onGlyphTabToggle = onGlyphTabToggle,
+                        onHapticsTabToggle = onHapticsTabToggle,
+                    )
 
                     Tab.About -> AboutScreen()
                 }

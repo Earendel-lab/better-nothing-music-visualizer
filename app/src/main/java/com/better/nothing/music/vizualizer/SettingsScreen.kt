@@ -1,7 +1,12 @@
 package com.better.nothing.music.vizualizer
 
 import android.content.Context
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,38 +14,61 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Vibration
 
 @Composable
-fun SettingsScreen() {
-    val scrollState = rememberScrollState()
+fun SettingsScreen(
+    glyphTabEnabled: Boolean,
+    hapticsTabEnabled: Boolean,
+    onGlyphTabToggle: (Boolean) -> Unit,
+    onHapticsTabToggle: (Boolean) -> Unit,
+) {
     val context = LocalContext.current
-    val prefs = context.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
-    var expanded by remember { mutableStateOf(false) }
-    val coroutineScope = rememberCoroutineScope()
+    val prefs = remember(context) {
+        context.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
+    }
+    val scrollState = rememberScrollState()
+
+    var themeExpanded by remember { mutableStateOf(false) }
     var selectedTheme by remember {
         mutableStateOf(prefs.getString("selected_theme", "Normal") ?: "Normal")
+    }
+
+    var fontExpanded by remember { mutableStateOf(false) }
+    var selectedFont by remember {
+        mutableStateOf(prefs.getString("selected_font", "NDot") ?: "NDot")
     }
 
     Column(
@@ -53,126 +81,197 @@ fun SettingsScreen() {
     ) {
         ScreenTitle(text = "Settings")
 
-        // Theme Selector Section
-        Column {
-            Text(
-                text = "App Theme",
-                style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-            @OptIn(ExperimentalMaterial3Api::class)
-            ExposedDropdownMenuBox(
-                expanded = expanded,
-                onExpandedChange = { expanded = !expanded }
-            ) {
-                OutlinedTextField(
-                    value = selectedTheme,
-                    onValueChange = {},
-                    readOnly = true,
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .menuAnchor()
-                )
-                androidx.compose.material3.DropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false }
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Normal") },
-                        onClick = {
-                            coroutineScope.launch {
-                                prefs.edit().putString("selected_theme", "Normal").apply()
-                                selectedTheme = "Normal"
-                            }
-                            expanded = false
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Nothing Red") },
-                        onClick = {
-                            coroutineScope.launch {
-                                prefs.edit().putString("selected_theme", "Nothing Red").apply()
-                                selectedTheme = "Nothing Red"
-                            }
-                            expanded = false
-                        }
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Changes apply immediately and persist across app restarts.",
-                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                color = androidx.compose.ui.graphics.Color.Gray
-            )
-        }
+        TabVisibilityCard(
+            title = "Glyph Tab",
+            description = "Show or hide the glyph controls tab from the bottom navigation.",
+            icon = {
+                Icon(Icons.Filled.GraphicEq, contentDescription = null, tint = Color(0xFFE7E0E7))
+            },
+            checked = glyphTabEnabled,
+            onCheckedChange = onGlyphTabToggle,
+        )
 
-            // Font Toggle Section
-            Column(
-                modifier = Modifier.padding(top = 32.dp)
-            ) {
-                Text(
-                    text = "Typography",
-                    style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-                val fontPrefs = context.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
-                var fontExpanded by remember { mutableStateOf(false) }
-                var selectedFont by remember {
-                    mutableStateOf(fontPrefs.getString("selected_font", "NDot") ?: "NDot")
-                }
-                @OptIn(ExperimentalMaterial3Api::class)
-                ExposedDropdownMenuBox(
-                    expanded = fontExpanded,
-                    onExpandedChange = { fontExpanded = !fontExpanded }
-                ) {
-                    OutlinedTextField(
-                        value = selectedFont,
-                        onValueChange = {},
-                        readOnly = true,
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = fontExpanded) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .menuAnchor()
-                    )
-                    androidx.compose.material3.DropdownMenu(
-                        expanded = fontExpanded,
-                        onDismissRequest = { fontExpanded = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("NDot") },
-                            onClick = {
-                                coroutineScope.launch {
-                                    fontPrefs.edit().putString("selected_font", "NDot").apply()
-                                    selectedFont = "NDot"
-                                }
-                                fontExpanded = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("NType") },
-                            onClick = {
-                                coroutineScope.launch {
-                                    fontPrefs.edit().putString("selected_font", "NType").apply()
-                                    selectedFont = "NType"
-                                }
-                                fontExpanded = false
-                            }
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Toggle between NDot and NType fonts app-wide.",
-                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                    color = androidx.compose.ui.graphics.Color.Gray
-                )
-            }
+        TabVisibilityCard(
+            title = "Haptics Tab",
+            description = "Show or hide the haptics tools tab from the bottom navigation.",
+            icon = {
+                Icon(Icons.Filled.Vibration, contentDescription = null, tint = Color(0xFFE7E0E7))
+            },
+            checked = hapticsTabEnabled,
+            onCheckedChange = onHapticsTabToggle,
+        )
 
-        }
+        SettingDropdown(
+            title = "App Theme",
+            value = selectedTheme,
+            expanded = themeExpanded,
+            onExpandedChange = { themeExpanded = !themeExpanded },
+            onDismiss = { themeExpanded = false },
+            options = listOf("Normal", "Nothing Red"),
+            onSelect = { theme ->
+                prefs.edit().putString("selected_theme", theme).apply()
+                selectedTheme = theme
+                themeExpanded = false
+            },
+            helperText = "Changes apply immediately and persist across app restarts."
+        )
+
+        SettingDropdown(
+            title = "Typography",
+            value = selectedFont,
+            expanded = fontExpanded,
+            onExpandedChange = { fontExpanded = !fontExpanded },
+            onDismiss = { fontExpanded = false },
+            options = listOf("NDot", "NType"),
+            onSelect = { font ->
+                prefs.edit().putString("selected_font", font).apply()
+                selectedFont = font
+                fontExpanded = false
+            },
+            helperText = "Toggle between NDot and NType fonts app-wide."
+        )
 
         BodyText(text = "More settings coming soon...")
         Spacer(modifier = Modifier.height(28.dp))
+    }
+}
+
+@Composable
+private fun TabVisibilityCard(
+    title: String,
+    description: String,
+    icon: @Composable () -> Unit,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    val containerColor by animateColorAsState(
+        targetValue = if (checked) Color(0xFF2D332F) else Color(0xFF1D1B1C),
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow,
+        ),
+        label = "settings_toggle_card",
+    )
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .background(Color(0xFF2A2829), RoundedCornerShape(18.dp))
+                    .padding(12.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                icon()
+            }
+
+            Spacer(modifier = Modifier.width(14.dp))
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White,
+                )
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFFB8B8B8),
+                )
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                thumbContent = {
+                    if (checked) {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = null,
+                            modifier = Modifier.padding(2.dp),
+                        )
+                    }
+                },
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color(0xFFB5F2B6),
+                    checkedTrackColor = Color(0xFF49554A),
+                    checkedBorderColor = Color.Transparent,
+                    uncheckedThumbColor = Color(0xFFE7E0E7),
+                    uncheckedTrackColor = Color(0xFF3D3B3C),
+                    uncheckedBorderColor = Color.Transparent,
+                ),
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SettingDropdown(
+    title: String,
+    value: String,
+    expanded: Boolean,
+    onExpandedChange: () -> Unit,
+    onDismiss: () -> Unit,
+    options: List<String>,
+    onSelect: (String) -> Unit,
+    helperText: String,
+) {
+    Column {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleLarge,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { onExpandedChange() },
+        ) {
+            OutlinedTextField(
+                value = value,
+                onValueChange = {},
+                readOnly = true,
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                leadingIcon = {
+                    Icon(Icons.Filled.Tune, contentDescription = null)
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor(),
+            )
+
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = onDismiss,
+            ) {
+                options.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option) },
+                        onClick = { onSelect(option) },
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = helperText,
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.Gray,
+        )
     }
 }

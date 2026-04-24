@@ -1,5 +1,7 @@
 package com.better.nothing.music.vizualizer
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -24,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,9 +47,10 @@ fun GlyphsScreen(
     selectedPreset: String,
     onPresetSelected: (String) -> Unit,
 ) {
-    val scrollState = rememberScrollState()
-    // derivedStateOf: re-computes only when selectedPreset or presets change,
-    // not on every frame of a slider drag.
+    val mainScrollState = rememberScrollState()
+    val chipScrollState = rememberScrollState() // Separate state for the chips
+
+    // selectedInfo is re-calculated only when relevant data changes
     val selectedInfo = remember(selectedPreset, presets) {
         presets.firstOrNull { it.key == selectedPreset } ?: presets.firstOrNull()
     }
@@ -56,15 +60,17 @@ fun GlyphsScreen(
             .fillMaxSize()
             .statusBarsPadding()
             .padding(horizontal = 8.dp, vertical = 8.dp)
-            .verticalScroll(scrollState),
+            .verticalScroll(mainScrollState),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         ScreenTitle(text = "Glyph controls")
+
         Text(
             text = "Gamma control",
             style = MaterialTheme.typography.headlineMedium,
             color = Color(0xFFD2D2D2),
         )
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -79,43 +85,70 @@ fun GlyphsScreen(
                 lineHeight = 22.sp,
             )
         }
+
         GammaCard(gammaValue = gammaValue, onGammaChanged = onGammaChanged)
+
         Text(
             text = "Visualizer presets",
-            modifier = Modifier.padding(top = 20.dp), // Adds space above the text
+            modifier = Modifier.padding(top = 20.dp),
             style = MaterialTheme.typography.headlineMedium,
             color = Color(0xFFD2D2D2),
         )
+
+        // The Horizontal Scroll Row
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
+                .horizontalScroll(chipScrollState), // Use the remembered state here
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             presets.forEach { preset ->
-                NativeFilterChip(
-                    label    = preset.key,
-                    selected = preset.key == selectedPreset,
-                    onClick  = { onPresetSelected(preset.key) },
+                // Keying helps Compose track the identity of the chip
+                key(preset.key) {
+                    NativeFilterChip(
+                        label    = preset.key,
+                        selected = preset.key == selectedPreset,
+                        onClick  = { onPresetSelected(preset.key) },
+                    )
+                }
+            }
+        }
+
+        Card(
+            shape = RoundedCornerShape(28.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF242222)),
+            modifier = Modifier
+                .fillMaxWidth()
+                // KEY: This modifier must be on the container that needs to resize.
+                // Putting it here ensures the Card's height morphs with a bounce.
+                .animateContentSize(
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessLow // Low stiffness makes the "morph" feel heavier and more organic
+                    )
+                ),
+        ) {
+            Crossfade(
+                targetState = selectedInfo?.description,
+                label = "desc_fade",
+                // Speed up the fade slightly so it happens during the morph
+                animationSpec = spring(stiffness = Spring.StiffnessMedium)
+            ) { description ->
+                Text(
+                    text = description ?: "Text describing the preset in a nice way.",
+                    style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 22.sp),
+                    color = Color(0xFFBABABA),
+                    modifier = Modifier
+                        .padding(20.dp)
+                        // Ensure the text fills the width so the height is calculated correctly
+                        .fillMaxWidth(),
                 )
             }
         }
-        Card(
-            shape  = RoundedCornerShape(28.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF242222)),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(
-                text     = selectedInfo?.description ?: "Text describing the preset in a nice way.",
-                style    = MaterialTheme.typography.bodyLarge.copy(lineHeight = 22.sp),
-                color    = Color(0xFFBABABA),
-                modifier = Modifier.padding(20.dp),
-            )
-        }
+
         Spacer(modifier = Modifier.height(28.dp))
     }
 }
-
 
 @Composable
 fun GammaCard(

@@ -11,6 +11,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.media.AudioAttributes;
+import android.media.AudioDeviceCallback;
 import android.media.AudioDeviceInfo;
 import android.media.AudioFormat;
 import android.media.AudioManager;
@@ -20,11 +21,13 @@ import android.media.projection.MediaProjection;
 import android.media.projection.MediaProjectionManager;
 import android.os.Binder;
 import android.os.Build;
-import android.util.Log;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.IBinder;
-import android.os.Looper;
+import android.os.Process;
 import android.os.SystemClock;
+import android.service.quicksettings.TileService;
+import android.util.Log;
 
 import androidx.annotation.RequiresPermission;
 import androidx.core.app.NotificationCompat;
@@ -56,29 +59,23 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/**
- * Real-time Nothing glyph visualizer driven by zones.config.
- * The Java port now follows the same high-level pipeline as musicViz.py:
- *   FFT -> unique frequency peaks -> per-frequency decay ->
- *   overlapping zone mapping -> quadratic normalization ->
- *   optional percent slice mapping -> glyph output
- * The only intentional runtime difference is normalization: the Python script
- * can normalize against the whole track, while the live service uses a rolling
- * per-zone peak because future frames are not known yet.
- */
-
 public class AudioCaptureService extends Service {
 
     private static final String TAG = "GlyphViz:Service";
     private static final String CHANNEL_ID = "glyph_viz_channel";
     private static final int NOTIF_ID = 1;
+    private static final String ACTION_STOP = "com.better.nothing.music.vizualizer.action.STOP";
 
     public static final String EXTRA_PRESET_KEY = "preset_key";
     public static final float DEFAULT_GAMMA = 2f;
+
     private static final String PREFS_NAME = "glyph_visualizer_prefs";
+    private static final String APP_PREFS_NAME = "viz_prefs";
     private static final String PREF_GAMMA = "gamma";
     private static final String PREF_LATENCY_PREFIX = "latency_device_";
+    private static final String PREF_LATENCY_ROUTE_PREFIX = "latency_route_";
     private static final String PREF_LATENCY_PRESETS = "latency_presets";
+
     private static final String DEFAULT_PRESET_KEY = "np1s";
     private static final String PHONE_MODEL_UNKNOWN = "UNKNOWN";
     private static final String PHONE_MODEL_PHONE1 = "PHONE1";
@@ -91,25 +88,76 @@ public class AudioCaptureService extends Service {
     private static final int SAMPLE_RATE = 44100;
     private static final int FPS = 60;
     private static final int HOP = Math.round(SAMPLE_RATE / (float) FPS);
-    private static final int ANALYSIS_WINDOW = roundHalfEvenToInt();
-    private static final int FFT_SIZE = nextPowerOfTwo();
+    private static final int ANALYSIS_WINDOW = 1102;
+    private static final int FFT_SIZE = 2048;
     private static final float HZ_PER_BIN = (float) SAMPLE_RATE / FFT_SIZE;
 
     private static final float PEAK_FALLOFF = 0.9995f;
-    private static final float PYTHON_FREQ_MULTIPLIER = 4f;
+    private static final float SPECTRUM_GAIN = 4f;
     private static final float EPSILON = 0.000001f;
-    private static final long MIN_SEND_MS = 16L;
+    private static final long MIN_SEND_INTERVAL_MS = 16L;
+    private static final long PROJECTION_SETTLE_DELAY_MS = 500L;
+
     private static volatile boolean sIsRunning = false;
 
-    private final Handler mHandler = new Handler(Looper.getMainLooper());
     private final IBinder mBinder = new LocalBinder();
+    private final Object mCaptureLock = new Object();
+    private final MediaProjection.Callback mProjectionCallback = new MediaProjection.Callback() {
+        @Override
+        public void onStop() {
+            Log.d(TAG, "MediaProjection stopped externally");
+            stopCapture();
+            stopSelf();
+        }
+    };
+    private final GlyphManager.Callback mGlyphCallback = new GlyphManager.Callback() {
+        @Override
+        public void onServiceConnected(ComponentName componentName) {
+            if (mGM == null) {
+                return;
+            }
+
+            Log.d(TAG, "Glyph service connected");
+            if (Common.is22111()) {
+                mGM.register(com.nothing.ketchum.Glyph.DEVICE_22111);
+            } else if (Common.is20111()) {
+                mGM.register(com.nothing.ketchum.Glyph.DEVICE_20111);
+            } else if (Common.is23111()) {
+                mGM.register(com.nothing.ketchum.Glyph.DEVICE_23111);
+            } else if (Common.is23113()) {
+                mGM.register(com.nothing.ketchum.Glyph.DEVICE_23113);
+            } else if (Common.is24111()) {
+                mGM.register(com.nothing.ketchum.Glyph.DEVICE_24111);
+            } else {
+                mGM.register(com.nothing.ketchum.Glyph.DEVICE_25111);
+            }
+
+            try {
+                if (!mSessionOpen) {
+                    mGM.openSession();
+                    mSessionOpen = true;
+                }
+            } catch (GlyphException e) {
+                Log.e(TAG, "Failed to open Glyph session", e);
+            }
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName componentName) {
+            mSessionOpen = false;
+        }
+    };
+
+    private HandlerThread mWorkerThread;
+    private Handler mWorkerHandler;
+    private AudioManager mAudioManager;
 
     private GlyphManager mGM;
-    private boolean mSessionOpen = false;
+    private volatile boolean mSessionOpen = false;
 
     private MediaProjection mProjection;
     private AudioRecord mAudioRecord;
-    private ExecutorService mExecutor;
+    private ExecutorService mCaptureExecutor;
     private volatile boolean mCapturing = false;
 
     private volatile VisualizerConfig mVisualizerConfig;
@@ -125,53 +173,26 @@ public class AudioCaptureService extends Service {
     private float[] mCurrentLightState = new float[0];
     private float[] mZonePeaks = new float[0];
     private float[] mDecayedFrequencyState = new float[0];
-    private int mLastHash = -999;
+    private int mLastHash = Integer.MIN_VALUE;
     private long mLastSendMs = 0L;
 
-    private final GlyphManager.Callback mGlyphCallback = new GlyphManager.Callback() {
+    private final AudioDeviceCallback mAudioDeviceCallback = new AudioDeviceCallback() {
         @Override
-        public void onServiceConnected(ComponentName cn) {
-            Log.d(TAG, "Glyph connected");
-            if (Common.is22111()) {
-                mGM.register(com.nothing.ketchum.Glyph.DEVICE_22111);
-            } else if (Common.is20111()) {
-                mGM.register(com.nothing.ketchum.Glyph.DEVICE_20111);
-            } else if (Common.is23111()) {
-                mGM.register(com.nothing.ketchum.Glyph.DEVICE_23111);
-            } else if (Common.is23113()) {
-                mGM.register(com.nothing.ketchum.Glyph.DEVICE_23113);
-            } else if (Common.is24111()) {
-                mGM.register(com.nothing.ketchum.Glyph.DEVICE_24111);
-            } else {
-                mGM.register(com.nothing.ketchum.Glyph.DEVICE_25111);  // Phone 4a noice
-            }
-            try {
-                mGM.openSession();
-                mSessionOpen = true;
-                Log.d(TAG, "Session open");
-            } catch (GlyphException e) {
-                Log.e(TAG, "Session fail: " + e.getMessage());
-            }
+        public void onAudioDevicesAdded(AudioDeviceInfo[] addedDevices) {
+            refreshLatencyForCurrentAudioRoute();
         }
 
         @Override
-        public void onServiceDisconnected(ComponentName cn) {
-            mSessionOpen = false;
+        public void onAudioDevicesRemoved(AudioDeviceInfo[] removedDevices) {
+            refreshLatencyForCurrentAudioRoute();
         }
     };
 
-    public class LocalBinder extends Binder {
-        public AudioCaptureService getService() {
-            return AudioCaptureService.this;
+    private record ZoneSpec(float lowHz, float highHz, float lowPercent, float highPercent) {
+        boolean hasPercentSlice() {
+            return !Float.isNaN(lowPercent) && !Float.isNaN(highPercent);
         }
     }
-
-    private record ZoneSpec(float lowHz, float highHz, float lowPercent, float highPercent) {
-
-        boolean hasPercentSlice() {
-                return !Float.isNaN(lowPercent) && !Float.isNaN(highPercent);
-            }
-        }
 
     private static final class FrequencyRange {
         final float lowHz;
@@ -187,13 +208,17 @@ public class AudioCaptureService extends Service {
         }
     }
 
-    private record VisualizerConfig(String presetKey, String description, float decay,
-                                    ZoneSpec[] zones, FrequencyRange[] uniqueRanges,
-                                    int[][] zoneToRangeIndices) {
+    private record VisualizerConfig(
+            String presetKey,
+            String description,
+            float decay,
+            ZoneSpec[] zones,
+            FrequencyRange[] uniqueRanges,
+            int[][] zoneToRangeIndices
+    ) {
     }
 
-    private record PendingFrame(float[] uniquePeaks, VisualizerConfig config, int configVersion,
-                                long dueAtMs) {
+    private record PendingFrame(float[] uniquePeaks, VisualizerConfig config, int configVersion, long dueAtMs) {
     }
 
     public static final class PresetInfo {
@@ -206,51 +231,166 @@ public class AudioCaptureService extends Service {
         }
     }
 
-    @Override
-    public IBinder onBind(Intent intent) {
-        Log.d(TAG, "onBind() called");
-        return mBinder;
+    public class LocalBinder extends Binder {
+        public AudioCaptureService getService() {
+            return AudioCaptureService.this;
+        }
     }
 
     @Override
     public void onCreate() {
         super.onCreate();
-        Log.d(TAG, "Service onCreate()");
+
+        mWorkerThread = new HandlerThread("GlyphVizWorker", Process.THREAD_PRIORITY_BACKGROUND);
+        mWorkerThread.start();
+        mWorkerHandler = Handler.createAsync(mWorkerThread.getLooper());
+        mAudioManager = getSystemService(AudioManager.class);
+        if (mAudioManager != null) {
+            mAudioManager.registerAudioDeviceCallback(mAudioDeviceCallback, mWorkerHandler);
+        }
+
         mSelectedDevice = DeviceProfile.detectDevice();
         mLatencyCompensationMs = loadLatencyCompensationMs(this, mSelectedDevice);
         mGamma = loadGamma(this);
-        Log.d(TAG, "Detected device: " + mSelectedDevice + ", loaded settings: latency=" + mLatencyCompensationMs + "ms, gamma=" + mGamma);
+        refreshLatencyForCurrentAudioRoute();
+
         try {
             refreshPresetCatalog();
-            if (mAvailablePresetKeys.isEmpty()) {
-                throw new JSONException("No presets available in zones.config");
+            if (!mAvailablePresetKeys.isEmpty()) {
+                mPresetKey = chooseDefaultPresetKey(phoneModelForDevice(mSelectedDevice), mAvailablePresetKeys);
+                mVisualizerConfig = loadVisualizerConfig(mPresetKey);
             }
-            if (!mAvailablePresetKeys.contains(mPresetKey)) {
-                mPresetKey = chooseDefaultPresetKey(mDetectedPhoneModel, mAvailablePresetKeys);
-            }
-            mVisualizerConfig = loadVisualizerConfig(mPresetKey);
-            resetVisualizerState();
-            Log.d(TAG, "Detected " + mDetectedPhoneModel + ", loaded preset " + mPresetKey + " with " + mVisualizerConfig.zones.length + " zones");
         } catch (Exception e) {
-            Log.e(TAG, "Failed to load zones.config: " + e.getMessage(), e);
+            Log.e(TAG, "Failed to load zones.config", e);
+            mVisualizerConfig = null;
         }
+        resetVisualizerState();
 
         mGM = GlyphManager.getInstance(getApplicationContext());
         mGM.init(mGlyphCallback);
-        Log.d(TAG, "GlyphManager initialized");
+    }
+
+    @Override
+    public IBinder onBind(Intent intent) {
+        return mBinder;
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        Log.d(TAG, "onStartCommand() flags=" + flags + " startId=" + startId);
+        if (intent != null && ACTION_STOP.equals(intent.getAction())) {
+            stopSelf();
+            return START_NOT_STICKY;
+        }
+
         String requestedPreset = intent != null ? intent.getStringExtra(EXTRA_PRESET_KEY) : null;
-        if (requestedPreset != null && !requestedPreset.trim().isEmpty()) {
-            Log.d(TAG, "Preset requested: " + requestedPreset);
+        if (requestedPreset != null && !requestedPreset.isBlank()) {
             setPreset(requestedPreset.trim());
         }
+
         startForeground(NOTIF_ID, buildNotification());
-        Log.d(TAG, "Started as foreground service");
         return START_NOT_STICKY;
+    }
+
+    @Override
+    public void onDestroy() {
+        stopCapture();
+        clearGlyphSession();
+        if (mGM != null) {
+            mGM.unInit();
+            mGM = null;
+        }
+        if (mAudioManager != null) {
+            mAudioManager.unregisterAudioDeviceCallback(mAudioDeviceCallback);
+            mAudioManager = null;
+        }
+        if (mWorkerThread != null) {
+            mWorkerThread.quitSafely();
+            mWorkerThread = null;
+            mWorkerHandler = null;
+        }
+        super.onDestroy();
+    }
+
+    public static boolean isRunning() {
+        return sIsRunning;
+    }
+
+    public static int loadLatencyCompensationMs(Context context, int device) {
+        return getPreferences(context).getInt(latencyPreferenceKey(device), 0);
+    }
+
+    public static int loadLatencyCompensationMs(Context context, int device, String routeKey) {
+        if (routeKey == null || routeKey.isBlank()) {
+            return loadLatencyCompensationMs(context, device);
+        }
+
+        SharedPreferences preferences = getPreferences(context);
+        String preferenceKey = routeLatencyPreferenceKey(device, routeKey);
+        if (preferences.contains(preferenceKey)) {
+            return preferences.getInt(preferenceKey, 0);
+        }
+        return loadLatencyCompensationMs(context, device);
+    }
+
+    public static void saveLatencyCompensationMs(Context context, int device, int latencyMs) {
+        getPreferences(context)
+                .edit()
+                .putInt(latencyPreferenceKey(device), latencyMs)
+                .apply();
+    }
+
+    public static void saveLatencyCompensationMs(Context context, int device, String routeKey, int latencyMs) {
+        if (routeKey == null || routeKey.isBlank()) {
+            saveLatencyCompensationMs(context, device, latencyMs);
+            return;
+        }
+
+        getPreferences(context)
+                .edit()
+                .putInt(routeLatencyPreferenceKey(device, routeKey), latencyMs)
+                .apply();
+    }
+
+    public static float loadGamma(Context context) {
+        return getPreferences(context).getFloat(PREF_GAMMA, DEFAULT_GAMMA);
+    }
+
+    public static void saveGamma(Context context, float gamma) {
+        getPreferences(context)
+                .edit()
+                .putFloat(PREF_GAMMA, gamma)
+                .apply();
+    }
+
+    public static List<Integer> loadLatencyPresets(Context context) {
+        String saved = getPreferences(context).getString(PREF_LATENCY_PRESETS, null);
+        if (saved == null || saved.isEmpty()) {
+            return new ArrayList<>(Arrays.asList(10, 154, 300));
+        }
+
+        ArrayList<Integer> presets = new ArrayList<>();
+        try {
+            for (String part : saved.split(",")) {
+                presets.add(Integer.parseInt(part.trim()));
+            }
+        } catch (Exception e) {
+            return new ArrayList<>(Arrays.asList(10, 154, 300));
+        }
+        return presets;
+    }
+
+    public static void saveLatencyPresets(Context context, List<Integer> presets) {
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < presets.size(); i++) {
+            if (i > 0) {
+                builder.append(",");
+            }
+            builder.append(presets.get(i));
+        }
+        getPreferences(context)
+                .edit()
+                .putString(PREF_LATENCY_PRESETS, builder.toString())
+                .apply();
     }
 
     public static List<PresetInfo> loadPresetInfos(Context context, int device) {
@@ -271,97 +411,32 @@ public class AudioCaptureService extends Service {
             }
             return buildPresetInfos(root, matching);
         } catch (FileNotFoundException e) {
-            List<PresetInfo> builtIn = getBuiltInPresetInfosForPhoneModel(phoneModelForCatalog);
-            if (builtIn.isEmpty() && !PHONE_MODEL_UNKNOWN.equals(detectedPhoneModel)) {
-                builtIn = getBuiltInPresetInfosForPhoneModel(detectedPhoneModel);
-            }
-            if (builtIn.isEmpty()) {
-                builtIn = getAllBuiltInPresetInfos();
-            }
-            return builtIn;
+            Log.w(TAG, "zones.config missing while loading preset list");
+            return Collections.emptyList();
         } catch (Exception e) {
-            Log.e(TAG, "Failed to load preset catalog", e);
-            return getAllBuiltInPresetInfos();
+            Log.e(TAG, "Failed to load preset list", e);
+            return Collections.emptyList();
         }
-    }
-
-    public static boolean isRunning() {
-        return sIsRunning;
-    }
-
-    public static int loadLatencyCompensationMs(Context context, int device) {
-        return  getPreferences(context).getInt(latencyPreferenceKey(device), 0);
-    }
-
-    public static void saveLatencyCompensationMs(Context context, int device, int latencyMs) {
-        getPreferences(context)
-                .edit()
-                .putInt(latencyPreferenceKey(device), latencyMs)
-                .apply();
-    }
-
-    public static float loadGamma(Context context) {
-        return getPreferences(context).getFloat(PREF_GAMMA, DEFAULT_GAMMA);
-    }
-
-    public static void saveGamma(Context context, float gamma) {
-        getPreferences(context)
-                .edit()
-                .putFloat(PREF_GAMMA, gamma)
-                .apply();
-    }
-
-    public static List<Integer> loadLatencyPresets(Context context) {
-        String saved = getPreferences(context).getString(PREF_LATENCY_PRESETS, null);
-        if (saved == null || saved.isEmpty()) {
-            return new ArrayList<>(Arrays.asList(10, 154, 300));
-        }
-        ArrayList<Integer> presets = new ArrayList<>();
-        try {
-            String[] parts = saved.split(",");
-            for (String part : parts) {
-                presets.add(Integer.parseInt(part.trim()));
-            }
-        } catch (Exception e) {
-            return new ArrayList<>(Arrays.asList(10, 154, 300));
-        }
-        return presets;
-    }
-
-    public static void saveLatencyPresets(Context context, List<Integer> presets) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < presets.size(); i++) {
-            if (i > 0) sb.append(",");
-            sb.append(presets.get(i));
-        }
-        getPreferences(context)
-                .edit()
-                .putString(PREF_LATENCY_PRESETS, sb.toString())
-                .apply();
-    }
-
-    private static SharedPreferences getPreferences(Context context) {
-        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-    }
-
-    private static String latencyPreferenceKey(int device) {
-        return PREF_LATENCY_PREFIX + Math.max(DeviceProfile.DEVICE_UNKNOWN, device);
     }
 
     public void setPreset(String presetSelection) {
-        if (presetSelection == null || presetSelection.trim().isEmpty()) {
+        if (presetSelection == null || presetSelection.isBlank()) {
             return;
         }
-        String trimmedSelection = presetSelection.trim();
-        applyPresetSelection(trimmedSelection);
+        applyPresetSelection(presetSelection.trim());
     }
 
     public void setDevice(int device) {
-        Log.d(TAG, "setDevice: " + device);
         mSelectedDevice = device;
-        int newLatency = loadLatencyCompensationMs(this, device);
-        Log.d(TAG, "Device " + device + " loaded with latency=" + newLatency + "ms");
-        setLatencyCompensationMs(newLatency);
+        setLatencyCompensationMs(loadLatencyCompensationMs(this, device));
+        try {
+            refreshPresetCatalog();
+            if (!mAvailablePresetKeys.isEmpty() && !mAvailablePresetKeys.contains(mPresetKey)) {
+                applyPresetSelection(chooseDefaultPresetKey(phoneModelForDevice(device), mAvailablePresetKeys));
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Unable to refresh presets after device change", e);
+        }
     }
 
     public void setLatencyCompensationMs(int latencyMs) {
@@ -372,273 +447,146 @@ public class AudioCaptureService extends Service {
     }
 
     public void setGamma(float gamma) {
-        if (mGamma != gamma)  mGamma = gamma;
+        mGamma = gamma;
     }
 
-    @Override
-    public void onDestroy() {
-        Log.d(TAG, "Service onDestroy() called");
-        sIsRunning = false;
-        stopCapture();
-        if (mSessionOpen) {
-            try {
-                Log.d(TAG, "Closing GlyphManager session");
-                mGM.closeSession();
-                Log.d(TAG, "GlyphManager session closed");
-            } catch (GlyphException ignored) {
-                Log.w(TAG, "Exception closing session: " + ignored.getMessage());
-            }
-        }
-        if (mGM != null) {
-            Log.d(TAG, "Un-initializing GlyphManager");
-            mGM.unInit();
-            Log.d(TAG, "GlyphManager uninitialized");
-        }
-        Log.d(TAG, "Service onDestroy() complete");
-        super.onDestroy();
-    }
-
-    @RequiresPermission(Manifest.permission.RECORD_AUDIO)
     public void startCapture(int resultCode, Intent data) {
-        if (mCapturing) {
-            stopCapture();
-        }
+        MediaProjectionManager projectionManager = (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
 
-        if (mVisualizerConfig == null) {
-            Log.e(TAG, "Cannot start capture without a parsed zones.config preset");
+        if (projectionManager == null) {
+            Log.e(TAG, "MediaProjectionManager is unavailable");
             sIsRunning = false;
             return;
         }
 
-        MediaProjectionManager pm = (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
-        if (pm == null) {
-            Log.e(TAG, "MediaProjectionManager is null");
-            sIsRunning = false;
-            return;
-        }
+        synchronized (mCaptureLock) {
+            stopCaptureLocked();
 
-        mProjection = pm.getMediaProjection(resultCode, data);
-        if (mProjection == null) {
-            Log.e(TAG, "Null projection - user likely denied screen capture permission");
-            sIsRunning = false;
-            return;
-        }
+            // 1. MUST promote to foreground BEFORE validating the projection token
+            startForeground(NOTIF_ID, buildNotification());
 
-        mProjection.registerCallback(new MediaProjection.Callback() {
-            @Override
-            public void onStop() {
-                Log.d(TAG, "MediaProjection stopped externally");
-                stopCapture();
-                stopSelf();
+            MediaProjection projection = projectionManager.getMediaProjection(resultCode, data);
+            if (projection == null) {
+                Log.e(TAG, "MediaProjection token was denied or expired");
+                stopForeground(STOP_FOREGROUND_REMOVE);
+                sIsRunning = false;
+                return;
             }
-        }, mHandler);
 
-        mCapturing = true;
-        sIsRunning = true;
-
-        // PERF FIX: Move all heavy initialization to the background thread
-        mExecutor = Executors.newSingleThreadExecutor();
-        mExecutor.submit(() -> {
-            try {
-                initGlyphManagerOnDemand();
-
-                // 1. Give the system a moment to register the MediaProjection permission
-                Thread.sleep(500);
-
-                // 2. Build the config ONLY after the sleep
-                AudioPlaybackCaptureConfiguration cfg = new AudioPlaybackCaptureConfiguration.Builder(mProjection)
-                        .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
-                        .addMatchingUsage(AudioAttributes.USAGE_GAME)
-                        .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
-                        .build();
-
-                // 3. Build and Start
-                mAudioRecord = new AudioRecord.Builder()
-                        .setAudioPlaybackCaptureConfig(cfg)
-                        .setAudioFormat(new AudioFormat.Builder()
-                                .setSampleRate(SAMPLE_RATE)
-                                .setChannelMask(AudioFormat.CHANNEL_IN_MONO)
-                                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                                .build())
-                        .setBufferSizeInBytes(FFT_SIZE * 4)
-                        .build();
-
-                mAudioRecord.startRecording();
-
-                // 4. Final Verification
-                Log.d(TAG, "AudioRecord State: " + mAudioRecord.getRecordingState()); // Should be 3
-
-                captureLoop();
-            } catch (Exception e) {
-                Log.e(TAG, "Bootstrapping failed", e);
+            mProjection = projection;
+            if (mWorkerHandler != null) {
+                mProjection.registerCallback(mProjectionCallback, mWorkerHandler);
             }
-        });
 
-        Log.d(TAG, "startCapture OK - initialization and loop dispatched to background");
+            mCapturing = true;
+            sIsRunning = true;
+            ensureCaptureExecutor();
+
+            mCaptureExecutor.execute(() -> {
+                Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO);
+                try {
+                    // Give the system a moment to settle the foreground state
+                    SystemClock.sleep(PROJECTION_SETTLE_DELAY_MS);
+
+                    AudioPlaybackCaptureConfiguration config =
+                            new AudioPlaybackCaptureConfiguration.Builder(mProjection)
+                                    .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
+                                    .addMatchingUsage(AudioAttributes.USAGE_GAME)
+                                    .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
+                                    .addMatchingUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                                    .build();
+
+                    // 2. Calculate safe buffer size
+                    int minBufSize = AudioRecord.getMinBufferSize(
+                            SAMPLE_RATE,
+                            AudioFormat.CHANNEL_IN_MONO,
+                            AudioFormat.ENCODING_PCM_16BIT);
+
+                    int bufferSize = Math.max(minBufSize, FFT_SIZE * 4);
+
+                    AudioRecord localRecord = new AudioRecord.Builder()
+                            .setAudioPlaybackCaptureConfig(config)
+                            .setAudioFormat(new AudioFormat.Builder()
+                                    .setSampleRate(SAMPLE_RATE)
+                                    .setChannelMask(AudioFormat.CHANNEL_IN_MONO)
+                                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                                    .build())
+                            .setBufferSizeInBytes(bufferSize)
+                            .build();
+
+                    // 3. Verify Initialization
+                    if (localRecord.getState() != AudioRecord.STATE_INITIALIZED) {
+                        localRecord.release();
+                        throw new IllegalStateException("AudioRecord failed to initialize. Check if another app is monopolizing audio.");
+                    }
+
+                    synchronized (mCaptureLock) {
+                        if (!mCapturing || mProjection != projection) {
+                            localRecord.release();
+                            return;
+                        }
+                        mAudioRecord = localRecord;
+                    }
+
+                    localRecord.startRecording();
+                    runCaptureLoop(localRecord);
+
+                } catch (Exception e) {
+                    Log.e(TAG, "Audio capture failed", e);
+                    if (mWorkerHandler != null) {
+                        mWorkerHandler.post(this::stopSelf);
+                    }
+                } finally {
+                    synchronized (mCaptureLock) {
+                        releaseAudioRecord();
+                    }
+                }
+            });
+        }
+
+        refreshNotification();
+        requestTileRefresh();
+    }
+    public void stopCapture() {
+        synchronized (mCaptureLock) {
+            stopCaptureLocked();
+        }
     }
 
-    public void stopCapture() {
-        Log.d(TAG, "stopCapture() called, mCapturing=" + mCapturing);
+    private void stopCaptureLocked() {
         mCapturing = false;
         sIsRunning = false;
-
-        // 1. Shut down the loop immediately to stop audio/glyph calls
-        if (mExecutor != null) {
-            Log.d(TAG, "Shutting down executor");
-            mExecutor.shutdownNow();
-            mExecutor = null;
-        }
-
-        // 2. Release AudioRecord
-        if (mAudioRecord != null) {
-            try {
-                mAudioRecord.stop();
-            } catch (Exception ignored) {}
-            mAudioRecord.release();
-            mAudioRecord = null;
-        }
-
-        // 3. Stop MediaProjection
-        if (mProjection != null) {
-            mProjection.stop();
-            mProjection = null;
-        }
-
-        // 4. Glyph Manager Cleanup: Turn off and UN-INIT to free resources
-        if (mGM != null) {
-            try {
-                turnOffGlyphsManually();
-                if (mSessionOpen) {
-                    mGM.closeSession();
-                    mSessionOpen = false;
-                }
-                mGM.unInit(); // Completely release Nothing SDK resources
-                mGM = null;
-                Log.d(TAG, "GlyphManager uninitialized and cleared");
-            } catch (Exception e) {
-                Log.w(TAG, "Error during GlyphManager cleanup", e);
-            }
-        }
-
+        shutdownCaptureExecutor();
+        releaseAudioRecord();
+        releaseProjection();
+        turnOffGlyphs();
         resetVisualizerState();
-        Log.d(TAG, "stopCapture complete");
+        stopForeground(STOP_FOREGROUND_REMOVE);
+        requestTileRefresh();
     }
 
-    /**
-     * Heavy initialization moved to background thread to avoid UI jank.
-     */
-    private void initGlyphManagerOnDemand() {
-        if (mGM == null) {
-            Log.d(TAG, "Initializing GlyphManager SDK...");
-            mGM = GlyphManager.getInstance(getApplicationContext());
-            mGM.init(mGlyphCallback);
-
-            // Open the session now that we are actually starting capture
-            try {
-                mGM.openSession();
-                mSessionOpen = true;
-                Log.d(TAG, "Glyph session opened successfully");
-            } catch (Exception e) {
-                Log.e(TAG, "Failed to open Glyph session", e);
-            }
-        }
-    }
-
-    private void turnOffGlyphsManually() {
-        if (mGM == null || !mSessionOpen) {
+    private void ensureCaptureExecutor() {
+        if (mCaptureExecutor != null && !mCaptureExecutor.isShutdown()) {
             return;
         }
+        mCaptureExecutor = Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "GlyphVizCapture");
+            thread.setDaemon(true);
+            return thread;
+        });
+    }
 
-        int glyphCount = resolveGlyphCount();
-        if (glyphCount > 0) {
-            try {
-                mGM.setFrameColors(new int[glyphCount]);
-            } catch (Exception e) {
-                Log.w(TAG, "Failed to push zeroed frame colors while stopping", e);
-            }
-        }
-
-        try {
-            mGM.turnOff();
-        } catch (Exception e) {
-            Log.w(TAG, "turnOff failed while stopping", e);
+    private void shutdownCaptureExecutor() {
+        if (mCaptureExecutor != null) {
+            mCaptureExecutor.shutdownNow();
+            mCaptureExecutor = null;
         }
     }
 
-    private int resolveGlyphCount() {
-        if (mVisualizerConfig != null) {
-            return mVisualizerConfig.zones.length;
-        }
-        if (mCurrentLightState.length > 0) {
-            return mCurrentLightState.length;
-        }
-        return switch (mSelectedDevice) {
-            case DeviceProfile.DEVICE_NP1 -> 15;
-            case DeviceProfile.DEVICE_NP2 -> 33;
-            case DeviceProfile.DEVICE_NP2A -> 26;
-            case DeviceProfile.DEVICE_NP3A -> 36;
-            case DeviceProfile.DEVICE_NP4A -> 7;
-            default -> 0;
-        };
-    }
-
-    @RequiresPermission(Manifest.permission.RECORD_AUDIO)
-    private void captureLoop() {
-        if (mVisualizerConfig == null) {
-            Log.e(TAG, "captureLoop aborted: config missing");
-            stopSelf();
-            return;
-        }
-
-        AudioPlaybackCaptureConfiguration cfg =
-                new AudioPlaybackCaptureConfiguration.Builder(mProjection)
-                        .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
-                        .addMatchingUsage(AudioAttributes.USAGE_GAME)
-                        .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
-                        .build();
-
-        int minBuf = AudioRecord.getMinBufferSize(
-                SAMPLE_RATE,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT
-        );
-
-        // Inside your Service
-        // 1. Create the matching attributes
-        AudioAttributes audioAttributes = new AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_MEDIA)
-                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                .build();
-
-// 2. Attach attributes to the CONFIG, not the Record Builder
-        AudioPlaybackCaptureConfiguration acfg = new AudioPlaybackCaptureConfiguration.Builder(mProjection)
-                .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
-                .addMatchingUsage(AudioAttributes.USAGE_GAME)
-                .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
-                .build();
-
-// 3. Build the AudioRecord (without calling setAudioAttributes)
-        mAudioRecord = new AudioRecord.Builder()
-                .setAudioPlaybackCaptureConfig(acfg)
-                .setAudioFormat(new AudioFormat.Builder()
-                        .setSampleRate(SAMPLE_RATE)
-                        .setChannelMask(AudioFormat.CHANNEL_IN_MONO)
-                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                        .build())
-                .setBufferSizeInBytes(Math.max(minBuf, FFT_SIZE * 4))
-                .build();
-
-        if (mAudioRecord.getState() != AudioRecord.STATE_INITIALIZED) {
-            Log.e(TAG, "AudioRecord init failed");
-            stopSelf();
-            return;
-        }
-
-        mAudioRecord.startRecording();
-        mCapturing = true;
+    private void runCaptureLoop(AudioRecord record) {
         VisualizerConfig initialConfig = mVisualizerConfig;
-        if (initialConfig != null) {
-            Log.d(TAG, "Capture started using " + initialConfig.presetKey + " with " + initialConfig.zones.length + " zones");
+        if (initialConfig == null) {
+            return;
         }
 
         float[] hann = buildHannWindow();
@@ -646,59 +594,37 @@ public class AudioCaptureService extends Service {
         short[] hop = new short[HOP];
         float[] re = new float[FFT_SIZE];
         float[] im = new float[FFT_SIZE];
-        float[] mag = new float[(FFT_SIZE / 2) + 1];
+        float[] magnitude = new float[(FFT_SIZE / 2) + 1];
         ArrayDeque<PendingFrame> pendingFrames = new ArrayDeque<>();
+
         int appliedLatencyVersion = mLatencySettingsVersion;
         int appliedPresetVersion = mPresetConfigVersion;
-        int rPos = 0;
+        int ringPosition = 0;
         int filled = 0;
 
-        while (mCapturing) {
-            int currentPresetVersion = mPresetConfigVersion;
+        while (mCapturing && !Thread.currentThread().isInterrupted()) {
             VisualizerConfig config = mVisualizerConfig;
+            int presetVersion = mPresetConfigVersion;
             if (config == null) {
+                return;
+            }
+
+            int read = record.read(hop, 0, HOP, AudioRecord.READ_BLOCKING);
+            if (read == AudioRecord.ERROR_DEAD_OBJECT) {
+                Log.e(TAG, "AudioRecord died while capturing");
+                return;
+            }
+            if (read == AudioRecord.ERROR_INVALID_OPERATION || read == AudioRecord.ERROR_BAD_VALUE) {
+                Log.w(TAG, "AudioRecord read returned " + read);
                 continue;
             }
-
-            int read = mAudioRecord.read(hop, 0, HOP);
-
-            // 1. Check for API-level errors
-            if (read < 0) {
-                String errorMsg = switch (read) {
-                    case AudioRecord.ERROR_INVALID_OPERATION -> "ERROR_INVALID_OPERATION";
-                    case AudioRecord.ERROR_BAD_VALUE -> "ERROR_BAD_VALUE";
-                    case AudioRecord.ERROR_DEAD_OBJECT -> "ERROR_DEAD_OBJECT";
-                    default -> "Unknown error: " + read;
-                };
-                Log.e("GlyphDebug", "AudioRecord read failed: " + errorMsg);
-            } else if (read > 0) {
-                // 2. Check for "Silent" data (all zeros)
-                short max = 0;
-                long sum = 0;
-                for (int i = 0; i < read; i++) {
-                    short sample = hop[i];
-                    if (Math.abs(sample) > max) max = (short) Math.abs(sample);
-                    sum += Math.abs(sample);
-                }
-                double average = (double) sum / read;
-
-                // Use a counter or timer so you don't spam the logcat 100 times a second
-                if (System.currentTimeMillis() % 1000 < 20) {
-                    Log.d("GlyphDebug", String.format("Read: %d samples | Max Amp: %d | Avg Amp: %.2f", read, max, average));
-
-                    if (max == 0) {
-                        Log.w("GlyphDebug", "DATA IS SILENT! The system is likely blocking the submix.");
-                    }
-                }
-            }
-
             if (read <= 0) {
                 continue;
             }
 
             for (int i = 0; i < read; i++) {
-                ring[rPos] = hop[i] / 32768f;
-                rPos = (rPos + 1) % ANALYSIS_WINDOW;
+                ring[ringPosition] = hop[i] / 32768f;
+                ringPosition = (ringPosition + 1) % ANALYSIS_WINDOW;
             }
             filled = Math.min(filled + read, ANALYSIS_WINDOW);
             if (filled < ANALYSIS_WINDOW) {
@@ -708,85 +634,50 @@ public class AudioCaptureService extends Service {
             Arrays.fill(re, 0f);
             Arrays.fill(im, 0f);
             for (int i = 0; i < ANALYSIS_WINDOW; i++) {
-                re[i] = ring[(rPos + i) % ANALYSIS_WINDOW] * hann[i];
+                re[i] = ring[(ringPosition + i) % ANALYSIS_WINDOW] * hann[i];
             }
+
             fft(re, im);
-
-            for (int k = 0; k <= FFT_SIZE / 2; k++) {
-                mag[k] = (float) Math.sqrt((re[k] * re[k]) + (im[k] * im[k]));
+            for (int i = 0; i <= FFT_SIZE / 2; i++) {
+                magnitude[i] = (float) Math.hypot(re[i], im[i]);
             }
 
-            float[] uniquePeaks = new float[config.uniqueRanges.length];
-            for (int fi = 0; fi < config.uniqueRanges.length; fi++) {
-                FrequencyRange range = config.uniqueRanges[fi];
-                float peak = 0f;
-                for (int bin = range.binLo; bin <= range.binHi; bin++) {
-                    if (mag[bin] > peak) {
-                        peak = mag[bin];
-                    }
-                }
-                uniquePeaks[fi] = peak;
-            }
-
-            if (currentPresetVersion != mPresetConfigVersion || config != mVisualizerConfig) {
+            if (presetVersion != mPresetConfigVersion || config != mVisualizerConfig) {
                 pendingFrames.clear();
                 appliedPresetVersion = mPresetConfigVersion;
                 continue;
             }
 
-            if (appliedLatencyVersion != mLatencySettingsVersion
-                    || appliedPresetVersion != currentPresetVersion) {
+            if (appliedLatencyVersion != mLatencySettingsVersion || appliedPresetVersion != presetVersion) {
                 pendingFrames.clear();
                 appliedLatencyVersion = mLatencySettingsVersion;
-                appliedPresetVersion = currentPresetVersion;
+                appliedPresetVersion = presetVersion;
             }
 
-            long dueAtMs = SystemClock.elapsedRealtime() + mLatencyCompensationMs;
-            pendingFrames.addLast(new PendingFrame(uniquePeaks, config, currentPresetVersion, dueAtMs));
+            float[] uniquePeaks = computeUniquePeaks(config, magnitude);
+            pendingFrames.addLast(new PendingFrame(
+                    uniquePeaks,
+                    config,
+                    presetVersion,
+                    SystemClock.elapsedRealtime() + mLatencyCompensationMs
+            ));
             dispatchDueFrames(pendingFrames);
         }
-        Log.d(TAG, "Loop ended");
     }
 
-    private void processFrame(float[] uniquePeaks, VisualizerConfig config, int configVersion) {
-        if (!mSessionOpen || mGM == null || config == null || configVersion != mPresetConfigVersion) {
-            return;
+    private float[] computeUniquePeaks(VisualizerConfig config, float[] magnitude) {
+        float[] uniquePeaks = new float[config.uniqueRanges.length];
+        for (int i = 0; i < config.uniqueRanges.length; i++) {
+            FrequencyRange range = config.uniqueRanges[i];
+            float peak = 0f;
+            for (int bin = range.binLo; bin <= range.binHi; bin++) {
+                if (magnitude[bin] > peak) {
+                    peak = magnitude[bin];
+                }
+            }
+            uniquePeaks[i] = peak;
         }
-
-        long now = System.currentTimeMillis();
-        if (now - mLastSendMs < MIN_SEND_MS) {
-            return;
-        }
-        mLastSendMs = now;
-
-        ensureStateArrays(config.zones.length, config.uniqueRanges.length);
-
-        float[] nextLightState = computeNextLightState(uniquePeaks, config);
-        System.arraycopy(nextLightState, 0, mCurrentLightState, 0, nextLightState.length);
-
-        int[] frameColors = buildFrameColors(nextLightState, config.zones.length);
-
-        int hash = Arrays.hashCode(frameColors);
-        if (hash == mLastHash) {
-            return;
-        }
-        mLastHash = hash;
-
-        try {
-            mGM.setFrameColors(frameColors);
-        } catch (Exception e) {
-            Log.w(TAG, "setFrameColors failed", e);
-        }
-    }
-
-    private int[] buildFrameColors(float[] normalizedLightState, int expectedLength) {
-        int[] frameColors = new int[expectedLength];
-        int count = Math.min(normalizedLightState.length, expectedLength);
-        for (int i = 0; i < count; i++) {
-            float gammaAdjusted = applyGamma(normalizedLightState[i]);
-            frameColors[i] = Math.round(gammaAdjusted * 4095f);
-        }
-        return frameColors;
+        return uniquePeaks;
     }
 
     private void dispatchDueFrames(ArrayDeque<PendingFrame> pendingFrames) {
@@ -797,18 +688,54 @@ public class AudioCaptureService extends Service {
                 return;
             }
             pendingFrames.removeFirst();
-            final float[] peaksForFrame = pendingFrame.uniquePeaks;
-            final VisualizerConfig configForFrame = pendingFrame.config;
-            final int configVersionForFrame = pendingFrame.configVersion;
-            mHandler.post(() -> processFrame(peaksForFrame, configForFrame, configVersionForFrame));
+            processFrame(pendingFrame.uniquePeaks, pendingFrame.config, pendingFrame.configVersion);
         }
+    }
+
+    private void processFrame(float[] uniquePeaks, VisualizerConfig config, int configVersion) {
+        if (!mSessionOpen || mGM == null || config == null || configVersion != mPresetConfigVersion) {
+            return;
+        }
+
+        long now = SystemClock.elapsedRealtime();
+        if (now - mLastSendMs < MIN_SEND_INTERVAL_MS) {
+            return;
+        }
+
+        ensureStateArrays(config.zones.length, config.uniqueRanges.length);
+
+        float[] nextLightState = computeNextLightState(uniquePeaks, config);
+        System.arraycopy(nextLightState, 0, mCurrentLightState, 0, nextLightState.length);
+
+        int[] frameColors = buildFrameColors(nextLightState, config.zones.length);
+        int frameHash = Arrays.hashCode(frameColors);
+        if (frameHash == mLastHash) {
+            return;
+        }
+
+        try {
+            mGM.setFrameColors(frameColors);
+            mLastHash = frameHash;
+            mLastSendMs = now;
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to push frame colors", e);
+        }
+    }
+
+    private int[] buildFrameColors(float[] normalizedLightState, int expectedLength) {
+        int[] frameColors = new int[expectedLength];
+        int count = Math.min(normalizedLightState.length, expectedLength);
+        for (int i = 0; i < count; i++) {
+            frameColors[i] = Math.round(applyGamma(normalizedLightState[i]) * 4095f);
+        }
+        return frameColors;
     }
 
     private float applyGamma(float normalizedValue) {
         if (normalizedValue <= 0f) {
             return 0f;
         }
-        return ((float) Math.pow(normalizedValue, mGamma));
+        return (float) Math.pow(normalizedValue, mGamma);
     }
 
     private float[] computeNextLightState(float[] uniquePeaks, VisualizerConfig config) {
@@ -829,9 +756,9 @@ public class AudioCaptureService extends Service {
                 mZonePeaks[zoneIndex] = EPSILON;
             }
 
-            float normalized = (rawZonePeak / mZonePeaks[zoneIndex]);
-            float quadratic = normalized * normalized;
-            float mapped = applyPercentSlice(quadratic, config.zones[zoneIndex]);
+            float normalized = rawZonePeak / mZonePeaks[zoneIndex];
+            float shaped = normalized * normalized;
+            float mapped = applyPercentSlice(shaped, config.zones[zoneIndex]);
             nextState[zoneIndex] = mapped < EPSILON ? 0f : mapped;
         }
 
@@ -841,7 +768,7 @@ public class AudioCaptureService extends Service {
     private float[] computeDecayedFrequencyState(float[] uniquePeaks, VisualizerConfig config) {
         float[] next = new float[mDecayedFrequencyState.length];
         for (int i = 0; i < next.length; i++) {
-            float current = (i < uniquePeaks.length ? uniquePeaks[i] : 0f) * PYTHON_FREQ_MULTIPLIER;
+            float current = (i < uniquePeaks.length ? uniquePeaks[i] : 0f) * SPECTRUM_GAIN;
             float risen = Math.max(mDecayedFrequencyState[i], current);
             float decayed = (config.decay * risen) + ((1f - config.decay) * current);
             next[i] = decayed < EPSILON ? 0f : decayed;
@@ -856,11 +783,12 @@ public class AudioCaptureService extends Service {
                 && mDecayedFrequencyState.length == uniqueRangeCount) {
             return;
         }
+
         mCurrentLightState = new float[zoneCount];
         mZonePeaks = new float[zoneCount];
         Arrays.fill(mZonePeaks, EPSILON);
         mDecayedFrequencyState = new float[uniqueRangeCount];
-        mLastHash = -999;
+        mLastHash = Integer.MIN_VALUE;
     }
 
     private void resetVisualizerState() {
@@ -874,7 +802,7 @@ public class AudioCaptureService extends Service {
             Arrays.fill(mZonePeaks, EPSILON);
             mDecayedFrequencyState = new float[mVisualizerConfig.uniqueRanges.length];
         }
-        mLastHash = -999;
+        mLastHash = Integer.MIN_VALUE;
         mLastSendMs = 0L;
     }
 
@@ -890,29 +818,52 @@ public class AudioCaptureService extends Service {
         if (percent <= low) {
             return 0f;
         }
-        if (percent >= high) {
-            return 1f;
-        }
-        if (high == low) {
+        if (percent >= high || high == low) {
             return 1f;
         }
         return (percent - low) / (high - low);
     }
 
-    private VisualizerConfig loadVisualizerConfig(String presetKey) throws IOException, JSONException {
-        // Logic is now linear: if the JSON config fails, an exception is thrown
-        // and handled by the caller (applyPresetSelection).
-        return loadVisualizerConfigFromZonesConfig(presetKey);
+    private void applyPresetSelection(String presetSelection) {
+        try {
+            refreshPresetCatalog();
+            String resolvedPresetKey = resolvePresetKey(presetSelection, mAvailablePresetKeys);
+            if (!resolvedPresetKey.equals(mPresetKey) || mVisualizerConfig == null) {
+                mVisualizerConfig = loadVisualizerConfig(resolvedPresetKey);
+                mPresetKey = resolvedPresetKey;
+                mPresetConfigVersion++;
+                resetVisualizerState();
+                refreshNotification();
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to apply preset: " + presetSelection, e);
+            mVisualizerConfig = null;
+            resetVisualizerState();
+            refreshNotification();
+        }
     }
 
-    private VisualizerConfig loadVisualizerConfigFromZonesConfig(String presetKey)
-            throws IOException, JSONException {
-        String rawJson = loadZonesConfigText(this);
-        JSONObject root = new JSONObject(rawJson);
-        JSONObject preset = root.optJSONObject(presetKey);
+    private String resolvePresetKey(String presetSelection, List<String> availablePresetKeys) {
+        if (availablePresetKeys == null || availablePresetKeys.isEmpty()) {
+            return DEFAULT_PRESET_KEY;
+        }
+        if (availablePresetKeys.contains(presetSelection)) {
+            return presetSelection;
+        }
 
+        String preferred = chooseDefaultPresetKey(phoneModelForDevice(mSelectedDevice), availablePresetKeys);
+        if (availablePresetKeys.contains(preferred)) {
+            return preferred;
+        }
+
+        return availablePresetKeys.get(0);
+    }
+
+    private VisualizerConfig loadVisualizerConfig(String presetKey) throws IOException, JSONException {
+        JSONObject root = loadZonesConfigRoot(this);
+        JSONObject preset = root.optJSONObject(presetKey);
         if (preset == null) {
-            throw new JSONException("Preset '" + presetKey + "' not found in zones.config");
+            throw new JSONException("Preset '" + presetKey + "' not found");
         }
 
         JSONArray zonesArray = preset.optJSONArray("zones");
@@ -931,89 +882,6 @@ public class AudioCaptureService extends Service {
                 decayAlpha,
                 zones
         );
-    }
-
-    // 1. Changed to accept Context as a parameter
-    private static String loadZonesConfigText(Context context) throws IOException {
-        InputStream in = null;
-
-        // 2. Removed "Context context = this;" because 'this' isn't allowed in static methods
-
-        // 1. Try Assets (Primary location)
-        try {
-            in = context.getAssets().open("zones.config");
-            return readFully(in);
-        } catch (IOException ignored) {
-            // Fall through to check filesystem
-        } finally {
-            closeQuietly(in);
-        }
-
-        // 2. Try Internal/External Filesystem locations
-        File externalDir = context.getExternalFilesDir(null);
-        File[] candidates = new File[]{
-                new File(context.getFilesDir(), "zones.config"),
-                externalDir == null ? null : new File(externalDir, "zones.config"),
-                new File(context.getApplicationInfo().dataDir, "zones.config")
-        };
-
-        for (File candidate : candidates) {
-            if (candidate != null && candidate.isFile()) {
-                return readFile(candidate);
-            }
-        }
-
-        // No fallback to internal presets. If it's not in the files, it's an error.
-        throw new FileNotFoundException(
-                "zones.config not found. Please bundle it as an asset or place it in the app's files directory."
-        );
-    }
-
-    private void applyPresetSelection(String presetSelection) {
-        try {
-            // refreshPresetCatalog should now strictly parse the JSON file to populate mAvailablePresetKeys
-            refreshPresetCatalog();
-
-            String resolvedPresetKey = resolvePresetKey(presetSelection, mAvailablePresetKeys);
-
-            if (!resolvedPresetKey.equals(mPresetKey) || mVisualizerConfig == null) {
-                // This will throw an exception if the key doesn't exist in the JSON
-                mVisualizerConfig = loadVisualizerConfig(resolvedPresetKey);
-                mPresetKey = resolvedPresetKey;
-                mPresetConfigVersion++;
-                resetVisualizerState();
-                refreshNotification();
-                Log.d(TAG, "Applied preset '" + mPresetKey + "' from config file.");
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to apply preset selection: " + presetSelection + ". No fallback available.", e);
-            // Set config to null to prevent the visualizer from running with invalid/missing data
-            mVisualizerConfig = null;
-        }
-    }
-
-    private String resolvePresetKey(String presetSelection, List<String> availablePresetKeys) {
-        if (availablePresetKeys == null || availablePresetKeys.isEmpty()) {
-            // Without a fallback catalog, this usually indicates the JSON failed to load
-            return DEFAULT_PRESET_KEY;
-        }
-
-        if (availablePresetKeys.contains(presetSelection)) {
-            return presetSelection;
-        }
-
-        String devicePresetKey = presetKeyForDevice(mSelectedDevice);
-        if (devicePresetKey != null && availablePresetKeys.contains(devicePresetKey)) {
-            return devicePresetKey;
-        }
-
-        String defaultPreset = chooseDefaultPresetKey(phoneModelForDevice(mSelectedDevice), availablePresetKeys);
-        if (availablePresetKeys.contains(defaultPreset)) {
-            return defaultPreset;
-        }
-
-        // If all else fails, pick the first one defined in the JSON
-        return availablePresetKeys.get(0);
     }
 
     private VisualizerConfig buildVisualizerConfig(
@@ -1054,9 +922,10 @@ public class AudioCaptureService extends Service {
                     overlaps.add(rangeIndex);
                 }
             }
+
             int[] mapping = new int[overlaps.size()];
-            for (int j = 0; j < overlaps.size(); j++) {
-                mapping[j] = overlaps.get(j);
+            for (int i = 0; i < overlaps.size(); i++) {
+                mapping[i] = overlaps.get(i);
             }
             zoneToRangeIndices[zoneIndex] = mapping;
         }
@@ -1077,60 +946,248 @@ public class AudioCaptureService extends Service {
             JSONArray zoneArray = zonesArray.getJSONArray(i);
             float lowHz = (float) zoneArray.getDouble(0);
             float highHz = (float) zoneArray.getDouble(1);
-
             if (lowHz > highHz) {
                 float tmp = lowHz;
                 lowHz = highHz;
                 highHz = tmp;
             }
 
-            float lowPercent = parseOptionalPercent(zoneArray, 3);
-            float highPercent = parseOptionalPercent(zoneArray, 4);
-            zones[i] = new ZoneSpec(lowHz, highHz, lowPercent, highPercent);
+            zones[i] = new ZoneSpec(
+                    lowHz,
+                    highHz,
+                    parseOptionalPercent(zoneArray, 3),
+                    parseOptionalPercent(zoneArray, 4)
+            );
         }
         return zones;
     }
 
-    private static String presetKeyForDevice(int device) {
-        return switch (device) {
-            case DeviceProfile.DEVICE_NP1 -> "np1";
-            case DeviceProfile.DEVICE_NP2 -> "np2";
-            case DeviceProfile.DEVICE_NP2A -> "np2a";
-            case DeviceProfile.DEVICE_NP3A -> "np3a";
-            case DeviceProfile.DEVICE_NP4A -> "np4a";
-            default -> null;
+    private void releaseAudioRecord() {
+        if (mAudioRecord == null) {
+            return;
+        }
+
+        try {
+            mAudioRecord.stop();
+        } catch (Exception ignored) {
+        }
+        mAudioRecord.release();
+        mAudioRecord = null;
+    }
+
+    private void releaseProjection() {
+        if (mProjection == null) {
+            return;
+        }
+
+        try {
+            mProjection.unregisterCallback(mProjectionCallback);
+        } catch (Exception ignored) {
+        }
+        try {
+            mProjection.stop();
+        } catch (Exception ignored) {
+        }
+        mProjection = null;
+    }
+
+    private void turnOffGlyphs() {
+        if (mGM == null || !mSessionOpen) {
+            return;
+        }
+
+        int glyphCount = resolveGlyphCount();
+        if (glyphCount > 0) {
+            try {
+                mGM.setFrameColors(new int[glyphCount]);
+            } catch (Exception e) {
+                Log.w(TAG, "Failed to clear glyph frame", e);
+            }
+        }
+
+        try {
+            mGM.turnOff();
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to turn glyphs off", e);
+        }
+    }
+
+    private void clearGlyphSession() {
+        turnOffGlyphs();
+        if (mGM != null && mSessionOpen) {
+            try {
+                mGM.closeSession();
+            } catch (GlyphException e) {
+                Log.w(TAG, "Failed to close Glyph session", e);
+            }
+            mSessionOpen = false;
+        }
+    }
+
+    private int resolveGlyphCount() {
+        if (mVisualizerConfig != null) {
+            return mVisualizerConfig.zones.length;
+        }
+        return switch (mSelectedDevice) {
+            case DeviceProfile.DEVICE_NP1 -> 15;
+            case DeviceProfile.DEVICE_NP2 -> 33;
+            case DeviceProfile.DEVICE_NP2A -> 26;
+            case DeviceProfile.DEVICE_NP3A -> 36;
+            case DeviceProfile.DEVICE_NP4A -> 7;
+            default -> 0;
         };
     }
 
-    private static String phoneModelForDevice(int device) {
-        return switch (device) {
-            case DeviceProfile.DEVICE_NP1 -> PHONE_MODEL_PHONE1;
-            case DeviceProfile.DEVICE_NP2 -> PHONE_MODEL_PHONE2;
-            case DeviceProfile.DEVICE_NP2A -> PHONE_MODEL_PHONE2A;
-            case DeviceProfile.DEVICE_NP3A -> PHONE_MODEL_PHONE3A;
-            case DeviceProfile.DEVICE_NP4A -> PHONE_MODEL_PHONE4A;
-            default -> PHONE_MODEL_UNKNOWN;
+    private Notification buildNotification() {
+        ensureNotificationChannel();
+
+        PendingIntent contentIntent = PendingIntent.getActivity(
+                this,
+                0,
+                new Intent(this, MainActivity.class)
+                        .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP),
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
+        );
+
+        PendingIntent stopIntent = PendingIntent.getService(
+                this,
+                1,
+                new Intent(this, AudioCaptureService.class).setAction(ACTION_STOP),
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
+        );
+
+        String content = mVisualizerConfig == null
+                ? "zones.config missing"
+                : mDetectedPhoneModel + " • " + mVisualizerConfig.presetKey + " • " + mVisualizerConfig.description;
+
+        return new NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle("Glyph Visualizer")
+                .setContentText(content)
+                .setSmallIcon(android.R.drawable.ic_media_play)
+                .setContentIntent(contentIntent)
+                .addAction(android.R.drawable.ic_media_pause, "Stop", stopIntent)
+                .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+                .setCategory(NotificationCompat.CATEGORY_SERVICE)
+                .setOnlyAlertOnce(true)
+                .setOngoing(true)
+                .setSilent(true)
+                .build();
+    }
+
+    private void ensureNotificationChannel() {
+        NotificationManager notificationManager = getSystemService(NotificationManager.class);
+        if (notificationManager == null || notificationManager.getNotificationChannel(CHANNEL_ID) != null) {
+            return;
+        }
+
+        NotificationChannel channel = new NotificationChannel(
+                CHANNEL_ID,
+                "Glyph Visualizer",
+                NotificationManager.IMPORTANCE_LOW
+        );
+        channel.setDescription("Keeps the visualizer alive while audio capture is active");
+        notificationManager.createNotificationChannel(channel);
+    }
+
+    private void refreshNotification() {
+        NotificationManager notificationManager = getSystemService(NotificationManager.class);
+        if (notificationManager != null) {
+            notificationManager.notify(NOTIF_ID, buildNotification());
+        }
+    }
+
+    private void requestTileRefresh() {
+        TileService.requestListeningState(
+                this,
+                new ComponentName(this, VisualizerTileService.class)
+        );
+    }
+
+    private void refreshPresetCatalog() throws IOException, JSONException {
+        mDetectedPhoneModel = detectPhoneModel();
+        String selectedPhoneModel = phoneModelForDevice(mSelectedDevice);
+        String phoneModelForCatalog = PHONE_MODEL_UNKNOWN.equals(selectedPhoneModel)
+                ? mDetectedPhoneModel
+                : selectedPhoneModel;
+
+        JSONObject root = loadZonesConfigRoot(this);
+        List<String> matching = getPresetKeysForPhoneModel(root, phoneModelForCatalog);
+        if (matching.isEmpty() && !PHONE_MODEL_UNKNOWN.equals(mDetectedPhoneModel)) {
+            matching = getPresetKeysForPhoneModel(root, mDetectedPhoneModel);
+        }
+        if (matching.isEmpty()) {
+            matching = getAllPresetKeys(root);
+        }
+        mAvailablePresetKeys = matching;
+    }
+
+    private static SharedPreferences getPreferences(Context context) {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+    }
+
+    private static String latencyPreferenceKey(int device) {
+        return PREF_LATENCY_PREFIX + Math.max(DeviceProfile.DEVICE_UNKNOWN, device);
+    }
+
+    private static String routeLatencyPreferenceKey(int device, String routeKey) {
+        String sanitizedRouteKey = routeKey
+                .trim()
+                .replaceAll("[^A-Za-z0-9._-]", "_");
+        return PREF_LATENCY_ROUTE_PREFIX
+                + Math.max(DeviceProfile.DEVICE_UNKNOWN, device)
+                + "_"
+                + sanitizedRouteKey;
+    }
+
+    private static JSONObject loadZonesConfigRoot(Context context) throws IOException, JSONException {
+        return new JSONObject(loadZonesConfigText(context));
+    }
+
+    private static String loadZonesConfigText(Context context) throws IOException {
+        InputStream inputStream = null;
+        try {
+            inputStream = context.getAssets().open("zones.config");
+            return readFully(inputStream);
+        } catch (IOException ignored) {
+        } finally {
+            closeQuietly(inputStream);
+        }
+
+        File externalDir = context.getExternalFilesDir(null);
+        File[] candidates = new File[]{
+                new File(context.getFilesDir(), "zones.config"),
+                externalDir == null ? null : new File(externalDir, "zones.config"),
+                new File(context.getApplicationInfo().dataDir, "zones.config")
         };
+
+        for (File candidate : candidates) {
+            if (candidate != null && candidate.isFile()) {
+                return readFile(candidate);
+            }
+        }
+
+        throw new FileNotFoundException("zones.config not found");
     }
 
     private static String readFile(File file) throws IOException {
-        FileInputStream input = new FileInputStream(file);
+        FileInputStream inputStream = new FileInputStream(file);
         try {
-            return readFully(input);
+            return readFully(inputStream);
         } finally {
-            closeQuietly(input);
+            closeQuietly(inputStream);
         }
     }
 
-    private static String readFully(InputStream input) throws IOException {
-        ByteArrayOutputStream output = new ByteArrayOutputStream();
+    private static String readFully(InputStream inputStream) throws IOException {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         byte[] buffer = new byte[4096];
         int read;
-        while ((read = input.read(buffer)) != -1) {
-            output.write(buffer, 0, read);
+        while ((read = inputStream.read(buffer)) != -1) {
+            outputStream.write(buffer, 0, read);
         }
-        return output.toString(StandardCharsets.UTF_8);
+        return outputStream.toString(StandardCharsets.UTF_8);
     }
+
     private static void closeQuietly(Closeable closeable) {
         if (closeable == null) {
             return;
@@ -1141,190 +1198,13 @@ public class AudioCaptureService extends Service {
         }
     }
 
-    private static float parseOptionalPercent(JSONArray zoneArray, int index) {
-        if (index >= zoneArray.length()) {
-            return Float.NaN;
-        }
-
-        Object raw = zoneArray.opt(index);
-        if (raw == null || raw == JSONObject.NULL) {
-            return Float.NaN;
-        }
-
-        try {
-            float value;
-            if (raw instanceof Number) {
-                value = ((Number) raw).floatValue();
-            } else {
-                String text = String.valueOf(raw).trim();
-                if (text.endsWith("%")) {
-                    text = text.substring(0, text.length() - 1).trim();
-                }
-                value = Float.parseFloat(text);
-            }
-
-            if (value >= 0f && value <= 1f) {
-                value *= 100f;
-            }
-            return value;
-        } catch (Exception ignored) {
-            return Float.NaN;
-        }
-    }
-
-    private static float[] buildHannWindow() {
-        float[] hann = new float[AudioCaptureService.ANALYSIS_WINDOW];
-        for (int i = 0; i < AudioCaptureService.ANALYSIS_WINDOW; i++) {
-            hann[i] = 0.5f * (1f - (float) Math.cos((2d * Math.PI * i) / AudioCaptureService.ANALYSIS_WINDOW));
-        }
-        return hann;
-    }
-
-    private static int roundHalfEvenToInt() {
-        return (int) Math.rint(1102.5);
-    }
-
-    private static int nextPowerOfTwo() {
-        int power = 1;
-        while (power < AudioCaptureService.ANALYSIS_WINDOW) {
-            power <<= 1;
-        }
-        return power;
-    }
-
-    private static void fft(float[] re, float[] im) {
-        int j = 0;
-        for (int i = 1; i < AudioCaptureService.FFT_SIZE; i++) {
-            int bit = AudioCaptureService.FFT_SIZE >> 1;
-            while ((j & bit) != 0) {
-                j ^= bit;
-                bit >>= 1;
-            }
-            j ^= bit;
-            if (i < j) {
-                float reTmp = re[i];
-                re[i] = re[j];
-                re[j] = reTmp;
-
-                float imTmp = im[i];
-                im[i] = im[j];
-                im[j] = imTmp;
-            }
-        }
-
-        for (int len = 2; len <= AudioCaptureService.FFT_SIZE; len <<= 1) {
-            double angle = (-2d * Math.PI) / len;
-            float wr = (float) Math.cos(angle);
-            float wi = (float) Math.sin(angle);
-
-            for (int i = 0; i < AudioCaptureService.FFT_SIZE; i += len) {
-                float cr = 1f;
-                float ci = 0f;
-                for (int k = 0; k < len / 2; k++) {
-                    float ur = re[i + k];
-                    float ui = im[i + k];
-                    float vr = (re[i + k + (len / 2)] * cr) - (im[i + k + (len / 2)] * ci);
-                    float vi = (re[i + k + (len / 2)] * ci) + (im[i + k + (len / 2)] * cr);
-
-                    re[i + k] = ur + vr;
-                    im[i + k] = ui + vi;
-                    re[i + k + (len / 2)] = ur - vr;
-                    im[i + k + (len / 2)] = ui - vi;
-
-                    float nextCr = (cr * wr) - (ci * wi);
-                    ci = (cr * wi) + (ci * wr);
-                    cr = nextCr;
-                }
-            }
-        }
-    }
-
-    private Notification buildNotification() {
-        NotificationManager nm = getSystemService(NotificationManager.class);
-        if (nm.getNotificationChannel(CHANNEL_ID) == null) {
-            NotificationChannel channel = new NotificationChannel(
-                    CHANNEL_ID,
-                    "Glyph Visualizer",
-                    NotificationManager.IMPORTANCE_LOW
-            );
-            nm.createNotificationChannel(channel);
-        }
-
-        PendingIntent pi = PendingIntent.getActivity(
-                this,
-                0,
-                new Intent(this, MainActivity.class),
-                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
-        );
-
-        String content = mVisualizerConfig == null
-                ? "zones.config missing"
-                : (mDetectedPhoneModel + " - " + mVisualizerConfig.presetKey + " - " + mVisualizerConfig.description);
-
-        return new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("Glyph Visualizer")
-                .setContentText(content)
-                .setSmallIcon(android.R.drawable.ic_media_play)
-                .setContentIntent(pi)
-                .setOngoing(true)
-                .setSilent(true)
-                .build();
-    }
-
-    private void refreshNotification() {
-        if (!sIsRunning && !mCapturing) {
-            return;
-        }
-        NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-        if (nm != null) {
-            nm.notify(NOTIF_ID, buildNotification());
-        }
-    }
-
-    private void refreshPresetCatalog() throws IOException, JSONException {
-        mDetectedPhoneModel = detectPhoneModel();
-        String selectedPhoneModel = phoneModelForDevice(mSelectedDevice);
-        String phoneModelForCatalog = PHONE_MODEL_UNKNOWN.equals(selectedPhoneModel)
-                ? mDetectedPhoneModel
-                : selectedPhoneModel;
-
-        try {
-            JSONObject root = loadZonesConfigRoot();
-            List<String> matching = getPresetKeysForPhoneModel(root, phoneModelForCatalog);
-            if (matching.isEmpty() && !PHONE_MODEL_UNKNOWN.equals(mDetectedPhoneModel)) {
-                matching = getPresetKeysForPhoneModel(root, mDetectedPhoneModel);
-            }
-            if (matching.isEmpty()) {
-                matching = getAllPresetKeys(root);
-            }
-            mAvailablePresetKeys = matching;
-        } catch (FileNotFoundException e) {
-            List<String> matching = getBuiltInPresetKeysForPhoneModel(phoneModelForCatalog);
-            if (matching.isEmpty() && !PHONE_MODEL_UNKNOWN.equals(mDetectedPhoneModel)) {
-                matching = getBuiltInPresetKeysForPhoneModel(mDetectedPhoneModel);
-            }
-            if (matching.isEmpty()) {
-                matching = getAllBuiltInPresetKeys();
-            }
-            mAvailablePresetKeys = matching;
-        }
-    }
-
-    private JSONObject loadZonesConfigRoot() throws IOException, JSONException {
-        return loadZonesConfigRoot(this);
-    }
-
-    private static JSONObject loadZonesConfigRoot(Context context) throws IOException, JSONException {
-        // Explicitly call the static version using the Context provided
-        return new JSONObject(loadZonesConfigText(context));
-    }
-
     private static List<String> getAllPresetKeys(JSONObject root) {
         ArrayList<String> presets = new ArrayList<>();
         JSONArray names = root.names();
         if (names == null) {
             return presets;
         }
+
         for (int i = 0; i < names.length(); i++) {
             String key = names.optString(i, "");
             if (isPresetEntry(root, key)) {
@@ -1339,10 +1219,9 @@ public class AudioCaptureService extends Service {
         ArrayList<PresetInfo> presets = new ArrayList<>();
         for (String key : keys) {
             JSONObject preset = root.optJSONObject(key);
-            if (preset == null) {
-                continue;
+            if (preset != null) {
+                presets.add(new PresetInfo(key, preset.optString("description", key)));
             }
-            presets.add(new PresetInfo(key, preset.optString("description", key)));
         }
         return presets;
     }
@@ -1357,6 +1236,7 @@ public class AudioCaptureService extends Service {
         if (names == null) {
             return presets;
         }
+
         for (int i = 0; i < names.length(); i++) {
             String key = names.optString(i, "");
             if (!isPresetEntry(root, key)) {
@@ -1383,73 +1263,9 @@ public class AudioCaptureService extends Service {
                 || "what-is-decay".equals(key)) {
             return false;
         }
+
         JSONObject preset = root.optJSONObject(key);
         return preset != null && preset.optJSONArray("zones") != null;
-    }
-
-    private static List<String> getBuiltInPresetKeysForPhoneModel(String phoneModel) {
-        if (PHONE_MODEL_PHONE1.equals(phoneModel)) {
-            return new ArrayList<>(Arrays.asList("np1", "np1_bass"));
-        }
-        if (PHONE_MODEL_PHONE2.equals(phoneModel)) {
-            return new ArrayList<>(Arrays.asList("np2", "np2_bass"));
-        }
-        if (PHONE_MODEL_PHONE2A.equals(phoneModel)) {
-            return new ArrayList<>(Arrays.asList("np2a", "np2a_bass"));
-        }
-        if (PHONE_MODEL_PHONE3A.equals(phoneModel)) {
-            return new ArrayList<>(Arrays.asList("np3a", "np3a_bass"));
-        }
-        if (PHONE_MODEL_PHONE4A.equals(phoneModel)) {
-            return new ArrayList<>(Arrays.asList("np4a", "np4a_bass"));
-        }
-        return new ArrayList<>();
-    }
-
-    private static List<String> getAllBuiltInPresetKeys() {
-        return new ArrayList<>(Arrays.asList(
-                "np1", "np1_bass",
-                "np2", "np2_bass",
-                "np2a", "np2a_bass",
-                "np3a", "np3a_bass",
-                "np4a", "np4a_bass"
-        ));
-    }
-
-    private static List<PresetInfo> getBuiltInPresetInfosForPhoneModel(String phoneModel) {
-        ArrayList<PresetInfo> presets = new ArrayList<>();
-        if (PHONE_MODEL_PHONE1.equals(phoneModel)) {
-            presets.add(new PresetInfo("np1", "Built-in vocal preset for Phone (1)"));
-            presets.add(new PresetInfo("np1_bass", "Built-in bass preset for Phone (1)"));
-        } else if (PHONE_MODEL_PHONE2.equals(phoneModel)) {
-            presets.add(new PresetInfo("np2", "Built-in vocal preset for Phone (2)"));
-            presets.add(new PresetInfo("np2_bass", "Built-in bass preset for Phone (2)"));
-        } else if (PHONE_MODEL_PHONE2A.equals(phoneModel)) {
-            presets.add(new PresetInfo("np2a", "Built-in vocal preset for Phone (2a)"));
-            presets.add(new PresetInfo("np2a_bass", "Built-in bass preset for Phone (2a)"));
-        } else if (PHONE_MODEL_PHONE3A.equals(phoneModel)) {
-            presets.add(new PresetInfo("np3a", "Built-in vocal preset for Phone (3a)"));
-            presets.add(new PresetInfo("np3a_bass", "Built-in bass preset for Phone (3a)"));
-        } else if (PHONE_MODEL_PHONE4A.equals(phoneModel)) {
-            presets.add(new PresetInfo("np4a", "Vocal Heavy — full spectrum on 6 LEDs"));
-            presets.add(new PresetInfo("np4a_bass", "Bass Heavy — beat-reactive cumulative fill"));
-        }
-        return presets;
-    }
-
-    private static List<PresetInfo> getAllBuiltInPresetInfos() {
-        return new ArrayList<>(Arrays.asList(
-                new PresetInfo("np1", "Built-in vocal preset for Phone (1)"),
-                new PresetInfo("np1_bass", "Built-in bass preset for Phone (1)"),
-                new PresetInfo("np2", "Built-in vocal preset for Phone (2)"),
-                new PresetInfo("np2_bass", "Built-in bass preset for Phone (2)"),
-                new PresetInfo("np2a", "Built-in vocal preset for Phone (2a)"),
-                new PresetInfo("np2a_bass", "Built-in bass preset for Phone (2a)"),
-                new PresetInfo("np3a", "Built-in vocal preset for Phone (3a)"),
-                new PresetInfo("np3a_bass", "Built-in bass preset for Phone (3a)"),
-                new PresetInfo("np4a", "Vocal Heavy — full spectrum on 6 LEDs"),
-                new PresetInfo("np4a_bass", "Bass Heavy — beat-reactive cumulative fill")
-        ));
     }
 
     private static String chooseDefaultPresetKey(String phoneModel, List<String> presetKeys) {
@@ -1457,25 +1273,33 @@ public class AudioCaptureService extends Service {
             return DEFAULT_PRESET_KEY;
         }
 
-        String preferred = null;
-        if (PHONE_MODEL_PHONE1.equals(phoneModel)) {
-            preferred = "np1";
-        } else if (PHONE_MODEL_PHONE2.equals(phoneModel)) {
-            preferred = "np2";
-        } else if (PHONE_MODEL_PHONE2A.equals(phoneModel)) {
-            preferred = "np2a";
-        } else if (PHONE_MODEL_PHONE3A.equals(phoneModel)) {
-            preferred = "np3a";
-        } else if (PHONE_MODEL_PHONE4A.equals(phoneModel)) {
-            preferred = "np4a";
-        } else if (PHONE_MODEL_PHONE3.equals(phoneModel)) {
-            preferred = "np3test";
-        }
+        List<String> preferredKeys = switch (phoneModel) {
+            case PHONE_MODEL_PHONE1 -> Arrays.asList("np1s", "np1");
+            case PHONE_MODEL_PHONE2 -> Collections.singletonList("np2");
+            case PHONE_MODEL_PHONE2A -> Collections.singletonList("np2a");
+            case PHONE_MODEL_PHONE3A -> Arrays.asList("np3as", "np3a");
+            case PHONE_MODEL_PHONE3 -> Collections.singletonList("np3test");
+            case PHONE_MODEL_PHONE4A -> Collections.singletonList("np4a");
+            default -> Collections.emptyList();
+        };
 
-        if (preferred != null && presetKeys.contains(preferred)) {
-            return preferred;
+        for (String preferredKey : preferredKeys) {
+            if (presetKeys.contains(preferredKey)) {
+                return preferredKey;
+            }
         }
         return presetKeys.get(0);
+    }
+
+    private static String phoneModelForDevice(int device) {
+        return switch (device) {
+            case DeviceProfile.DEVICE_NP1 -> PHONE_MODEL_PHONE1;
+            case DeviceProfile.DEVICE_NP2 -> PHONE_MODEL_PHONE2;
+            case DeviceProfile.DEVICE_NP2A -> PHONE_MODEL_PHONE2A;
+            case DeviceProfile.DEVICE_NP3A -> PHONE_MODEL_PHONE3A;
+            case DeviceProfile.DEVICE_NP4A -> PHONE_MODEL_PHONE4A;
+            default -> PHONE_MODEL_UNKNOWN;
+        };
     }
 
     private static String detectPhoneModel() {
@@ -1491,6 +1315,9 @@ public class AudioCaptureService extends Service {
         if (Common.is24111()) {
             return PHONE_MODEL_PHONE3A;
         }
+        if (Common.is25111()) {
+            return PHONE_MODEL_PHONE4A;
+        }
 
         String buildText = (
                 Build.MANUFACTURER + " "
@@ -1500,6 +1327,9 @@ public class AudioCaptureService extends Service {
                         + Build.PRODUCT
         ).toLowerCase(Locale.US);
 
+        if (buildText.contains("phone 4a")) {
+            return PHONE_MODEL_PHONE4A;
+        }
         if (buildText.contains("phone 3a")) {
             return PHONE_MODEL_PHONE3A;
         }
@@ -1515,40 +1345,186 @@ public class AudioCaptureService extends Service {
         if (buildText.contains("phone 1")) {
             return PHONE_MODEL_PHONE1;
         }
-
         return PHONE_MODEL_UNKNOWN;
     }
+
+    private static float parseOptionalPercent(JSONArray zoneArray, int index) {
+        if (index >= zoneArray.length()) {
+            return Float.NaN;
+        }
+
+        Object raw = zoneArray.opt(index);
+        if (raw == null || raw == JSONObject.NULL) {
+            return Float.NaN;
+        }
+
+        try {
+            float value;
+            if (raw instanceof Number number) {
+                value = number.floatValue();
+            } else {
+                String text = String.valueOf(raw).trim();
+                if (text.endsWith("%")) {
+                    text = text.substring(0, text.length() - 1).trim();
+                }
+                value = Float.parseFloat(text);
+            }
+
+            if (value >= 0f && value <= 1f) {
+                value *= 100f;
+            }
+            return value;
+        } catch (Exception ignored) {
+            return Float.NaN;
+        }
+    }
+
+    private static float[] buildHannWindow() {
+        float[] hann = new float[ANALYSIS_WINDOW];
+        for (int i = 0; i < ANALYSIS_WINDOW; i++) {
+            hann[i] = 0.5f * (1f - (float) Math.cos((2d * Math.PI * i) / ANALYSIS_WINDOW));
+        }
+        return hann;
+    }
+
+    private static void fft(float[] re, float[] im) {
+        int j = 0;
+        for (int i = 1; i < FFT_SIZE; i++) {
+            int bit = FFT_SIZE >> 1;
+            while ((j & bit) != 0) {
+                j ^= bit;
+                bit >>= 1;
+            }
+            j ^= bit;
+            if (i < j) {
+                float reTmp = re[i];
+                re[i] = re[j];
+                re[j] = reTmp;
+
+                float imTmp = im[i];
+                im[i] = im[j];
+                im[j] = imTmp;
+            }
+        }
+
+        for (int len = 2; len <= FFT_SIZE; len <<= 1) {
+            double angle = (-2d * Math.PI) / len;
+            float wr = (float) Math.cos(angle);
+            float wi = (float) Math.sin(angle);
+
+            for (int i = 0; i < FFT_SIZE; i += len) {
+                float cr = 1f;
+                float ci = 0f;
+                for (int k = 0; k < len / 2; k++) {
+                    float ur = re[i + k];
+                    float ui = im[i + k];
+                    float vr = (re[i + k + (len / 2)] * cr) - (im[i + k + (len / 2)] * ci);
+                    float vi = (re[i + k + (len / 2)] * ci) + (im[i + k + (len / 2)] * cr);
+
+                    re[i + k] = ur + vr;
+                    im[i + k] = ui + vi;
+                    re[i + k + (len / 2)] = ur - vr;
+                    im[i + k + (len / 2)] = ui - vi;
+
+                    float nextCr = (cr * wr) - (ci * wi);
+                    ci = (cr * wi) + (ci * wr);
+                    cr = nextCr;
+                }
+            }
+        }
+    }
+
     public String getCurrentDeviceName() {
-        AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-        AudioDeviceInfo[] outputs = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS);
+        AudioRouteInfo routeInfo = resolveCurrentAudioRoute();
+        return routeInfo != null ? routeInfo.displayName : "Internal Speaker";
+    }
 
-        AudioDeviceInfo bestDevice = null;
-
-        // Pass 1: Look EXCLUSIVELY for high-fidelity Bluetooth (Music)
-        for (AudioDeviceInfo device : outputs) {
-            if (device.getType() == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP) {
-                return device.getProductName().toString(); // Return immediately (e.g., "Nothing Ear (open)")
-            }
+    private void refreshLatencyForCurrentAudioRoute() {
+        SharedPreferences appPreferences = getSharedPreferences(APP_PREFS_NAME, Context.MODE_PRIVATE);
+        if (!appPreferences.getBoolean("auto_device_enabled", true)) {
+            return;
         }
 
-        // Pass 2: Look for Wired/USB Headsets
-        for (AudioDeviceInfo device : outputs) {
-            int type = device.getType();
-            if (type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
-                    type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
-                    type == AudioDeviceInfo.TYPE_USB_HEADSET) {
-                return device.getProductName().toString();
-            }
+        AudioRouteInfo routeInfo = resolveCurrentAudioRoute();
+        String routeKey = routeInfo != null ? routeInfo.storageKey : null;
+        setLatencyCompensationMs(loadLatencyCompensationMs(this, mSelectedDevice, routeKey));
+    }
+
+    private AudioRouteInfo resolveCurrentAudioRoute() {
+        if (mAudioManager == null) {
+            return null;
         }
 
-        // Pass 3: Fallback to Internal Speaker, but skip the "Earpiece" (Type 1)
-        // and "Telephony" (Type 18) which often carry the A063 label.
+        AudioDeviceInfo[] outputs = mAudioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS);
+        AudioDeviceInfo preferredOutput = null;
         for (AudioDeviceInfo device : outputs) {
-            if (device.getType() == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) {
-                return "Internal Speaker";
+            if (isBluetoothOutput(device)) {
+                preferredOutput = device;
+                break;
             }
         }
+        if (preferredOutput == null) {
+            for (AudioDeviceInfo device : outputs) {
+                if (isWiredOutput(device)) {
+                    preferredOutput = device;
+                    break;
+                }
+            }
+        }
+        if (preferredOutput == null) {
+            for (AudioDeviceInfo device : outputs) {
+                if (device.getType() == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) {
+                    preferredOutput = device;
+                    break;
+                }
+            }
+        }
+        if (preferredOutput == null && outputs.length > 0) {
+            preferredOutput = outputs[0];
+        }
+        return preferredOutput != null ? toAudioRouteInfo(preferredOutput) : null;
+    }
 
-        return "Internal Speaker";
+    private static boolean isBluetoothOutput(AudioDeviceInfo device) {
+        int type = device.getType();
+        return type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP
+                || type == AudioDeviceInfo.TYPE_BLE_HEADSET
+                || type == AudioDeviceInfo.TYPE_BLE_SPEAKER
+                || type == AudioDeviceInfo.TYPE_BLE_BROADCAST;
+    }
+
+    private static boolean isWiredOutput(AudioDeviceInfo device) {
+        int type = device.getType();
+        return type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES
+                || type == AudioDeviceInfo.TYPE_WIRED_HEADSET
+                || type == AudioDeviceInfo.TYPE_USB_HEADSET;
+    }
+
+    private static AudioRouteInfo toAudioRouteInfo(AudioDeviceInfo device) {
+        String routeName = device.getType() == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
+                ? "Internal Speaker"
+                : String.valueOf(device.getProductName());
+        String normalizedName = routeName.toLowerCase(Locale.US)
+                .replaceAll("[^a-z0-9._-]+", "_")
+                .replaceAll("^_+|_+$", "");
+        if (normalizedName.isEmpty()) {
+            normalizedName = "unknown_output";
+        }
+
+        String address = device.getAddress();
+        String normalizedAddress = null;
+        if (address != null && !address.isBlank()) {
+            normalizedAddress = address.toLowerCase(Locale.US)
+                    .replaceAll("[^a-z0-9._-]+", "_")
+                    .replaceAll("^_+|_+$", "");
+        }
+
+        String routeKey = device.getType() + "_" + (normalizedAddress != null && !normalizedAddress.isEmpty()
+                ? normalizedAddress
+                : normalizedName);
+        return new AudioRouteInfo(routeKey, routeName);
+    }
+
+    private record AudioRouteInfo(String storageKey, String displayName) {
     }
 }

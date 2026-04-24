@@ -1,8 +1,10 @@
 package com.better.nothing.music.vizualizer
 
+import android.content.Context
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.EaseInOutCubic
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -15,12 +17,16 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,6 +37,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -51,13 +58,17 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
@@ -110,16 +121,17 @@ fun NativeFilterChip(
         selected = selected,
         onClick  = onClick,
         label    = { Text(text = label, style = MaterialTheme.typography.labelLarge) },
+        shape    = RoundedCornerShape(8.dp),
         colors   = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = Color(0xFFD8D3DA),
-            selectedLabelColor     = Color(0xFF1E1B20),
-            containerColor         = Color(0xFF5A565A),
-            labelColor             = Color(0xFFE7E0E7),
+            selectedContainerColor = Color(0xFFDBDBDB),
+            selectedLabelColor     = Color(0xFF000000),
+            containerColor         = Color(0xFF000000),
+            labelColor             = Color(0xFF727272),
         ),
         border   = FilterChipDefaults.filterChipBorder(
             enabled             = true,
             selected            = selected,
-            borderColor         = Color.Transparent,
+            borderColor         = Color(0xFF727272),
             selectedBorderColor = Color.Transparent,
         ),
     )
@@ -196,19 +208,24 @@ fun StartStopButton(
 @Composable
 fun NativeBottomBar(
     selectedTab: Tab,
+    visibleTabs: List<Tab>,
     onTabSelected: (Tab) -> Unit,
 ) {
-    val tabs = Tab.all
-
     NavigationBar(
         modifier = Modifier
-            .height(64.dp) // The magic number
-            .padding(bottom = 16.dp), // Raise buttons up with bottom padding
+            .height(64.dp)
+            .navigationBarsPadding()
+            .animateContentSize(
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessLow
+                )
+            ),
         containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
-        windowInsets = WindowInsets(0) // Prevents extra padding on gesture-nav phones
+        windowInsets = WindowInsets(0)
     ) {
-        tabs.forEach { tab ->
+        visibleTabs.forEach { tab ->
             val isSelected = tab == selectedTab
             NavigationBarItem(
                 selected = isSelected,
@@ -225,6 +242,7 @@ fun NativeBottomBar(
                         imageVector = when (tab) {
                             Tab.Audio -> Icons.AutoMirrored.Filled.VolumeUp
                             Tab.Glyphs -> Icons.Filled.GraphicEq
+                            Tab.Haptics -> Icons.Filled.Vibration
                             Tab.Settings -> Icons.Filled.Settings
                             Tab.About -> Icons.Filled.Info
                         },
@@ -252,64 +270,79 @@ fun ExpressiveSlider(
     modifier: Modifier = Modifier,
     enableHaptics: Boolean = false
 ) {
-    // Must be remembered — a new object every recompose breaks press tracking.
     val interactionSource = remember { MutableInteractionSource() }
-    val view = LocalView.current
+    val haptics = LocalHapticFeedback.current
 
-    // Track the previous value to detect changes
-    val previousValue = remember { mutableStateOf(value) }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val isDragged by interactionSource.collectIsDraggedAsState()
+    val isActive = isPressed || isDragged
+
+    // Trigger haptic on Press/Release
+    LaunchedEffect(isActive) {
+        if (isActive) {
+            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+        } else {
+            haptics.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+        }
+    }
+
+    // The "Expressive" factor (1.0 to 1.8)
+    val animationFactor by animateFloatAsState(
+        targetValue = if (isActive) 2.1f else 1.0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "expressive_bounce"
+    )
+
+    val previousValue = remember { mutableIntStateOf(value.toInt()) }
 
     Slider(
-        value             = value,
-        onValueChange     = { newValue ->
+        value = value,
+        onValueChange = { newValue ->
             onValueChange(newValue)
-
-            // Trigger haptic feedback if enabled
-            if (enableHaptics) {
-                val change = kotlin.math.abs(newValue - previousValue.value)
-                if (change >= 1f) { // Only trigger for changes >= 1ms to avoid excessive feedback
-                    view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                    previousValue.value = newValue
-                }
-            } else {
-                previousValue.value = newValue
+            if (enableHaptics && newValue.toInt() != previousValue.intValue) {
+                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                previousValue.intValue = newValue.toInt()
             }
         },
-        valueRange        = valueRange,
+        valueRange = valueRange,
         interactionSource = interactionSource,
-        modifier          = modifier.height(48.dp),
+        modifier = modifier.height(56.dp), // Extra height for the "bloom"
         thumb = {
-            Spacer(
+            // THUMB: Gets THINNER as animationFactor increases
+            // Width: 4dp -> 2dp | Height: 44dp -> 48dp
+            val thumbWidth = 4.dp / animationFactor
+
+            Box(
                 modifier = Modifier
-                    .size(width = 4.dp, height = 44.dp)
+                    .size(width = thumbWidth, height = 44.dp * (animationFactor * 0.8f).coerceAtLeast(1f))
                     .background(
-                        color = MaterialTheme.colorScheme.onBackground,
-                        shape = RoundedCornerShape(2.dp)
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = RoundedCornerShape(2.dp) // Keeps same corner radius
                     )
             )
         },
         track = { sliderState ->
+            // TRACK: Gets THICKER
+            // Radius: We want it to look like a pill when thin, but less rounded when thick
+            val trackHeight = 16.dp * animationFactor
+
             SliderDefaults.Track(
-                sliderState          = sliderState,
-                modifier             = Modifier.height(16.dp),
-                thumbTrackGapSize    = 4.dp,
+                sliderState = sliderState,
+                modifier = Modifier
+                    .height(trackHeight),
+                thumbTrackGapSize = 4.dp,
                 trackInsideCornerSize = 2.dp,
-                colors               = SliderDefaults.colors(
-                    activeTrackColor   = MaterialTheme.colorScheme.primary,
-                    inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant
+                colors = SliderDefaults.colors(
+                    activeTrackColor = MaterialTheme.colorScheme.primary,
+                    inactiveTrackColor = Color(0xFF1C1B1B)
                 )
             )
         }
     )
-
-    // Update the previous value on initial composition
-    LaunchedEffect(value) {
-        if (previousValue.value != value) {
-            previousValue.value = value
-        }
-    }
 }
-
 val NTypeFontFamily = FontFamily(
     Font(R.font.ntype82)
 )
@@ -420,11 +453,4 @@ fun BetterVizTheme(content: @Composable () -> Unit) {
             content = content,
         )
     }
-}
-
-// Helper object for clean code
-object BetterVizTheme {
-    val spacing: AppSpacing
-        @Composable
-        get() = LocalAppSpacing.current
 }

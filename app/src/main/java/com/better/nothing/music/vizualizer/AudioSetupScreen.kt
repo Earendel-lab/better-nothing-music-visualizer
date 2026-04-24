@@ -3,24 +3,15 @@ package com.better.nothing.music.vizualizer
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
-import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -32,13 +23,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import kotlin.math.roundToInt
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.ui.text.font.FontWeight
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+
 
 @Composable
 fun AudioScreen(
@@ -165,14 +160,13 @@ fun AutoDeviceCard(
                 checked = enabled,
                 onCheckedChange = onToggle,
                 colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color(0xFFB5F2B6),
-                    checkedTrackColor = Color(0xFF403F44)
+                    checkedThumbColor = Color(0xFF000000),
+                    checkedTrackColor = MaterialTheme.colorScheme.primary
                 )
             )
         }
     }
 }
-
 @Composable
 fun LatencyCard(
     latencyMs: Int,
@@ -181,13 +175,37 @@ fun LatencyCard(
     onLatencyPresetsChanged: (List<Int>) -> Unit,
 ) {
     val haptics = LocalHapticFeedback.current
-
-    // KEY FIX: Track the ID (index) of the preset being edited.
-    // We initialize it by finding which index currently matches latencyMs.
     var draggingIndex by remember { mutableIntStateOf(-1) }
 
-    // Sync the local selection with the external state only when NOT dragging
+    val visualOrder = remember(latencyPresets) {
+        latencyPresets.mapIndexed { i, v -> i to v }
+            .sortedBy { it.second }
+            .map { it.first }
+    }
+
+    LaunchedEffect(visualOrder) {
+        haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+    }
+
     val activeIndex = if (draggingIndex != -1) draggingIndex else latencyPresets.indexOf(latencyMs)
+
+    val updateLatency = { newValue: Int ->
+        val clampedValue = newValue.coerceIn(0, 500)
+        if (draggingIndex == -1) draggingIndex = latencyPresets.indexOf(latencyMs)
+
+        onLatencyChanged(clampedValue)
+
+        if (draggingIndex != -1) {
+            val currentList = latencyPresets.toMutableList()
+            val isColliding = currentList.mapIndexed { i, v -> i to v }
+                .any { (i, v) -> i != draggingIndex && v == clampedValue }
+
+            if (!isColliding) {
+                currentList[draggingIndex] = clampedValue
+                onLatencyPresetsChanged(currentList)
+            }
+        }
+    }
 
     Card(
         shape = RoundedCornerShape(28.dp),
@@ -198,8 +216,13 @@ fun LatencyCard(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text(text = "Latency Compensation", color = Color(0xFFE6E1E3), style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = "Latency Compensation",
+                color = Color(0xFFE6E1E3),
+                style = MaterialTheme.typography.titleMedium
+            )
 
+            // --- Presets Selector ---
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -207,24 +230,18 @@ fun LatencyCard(
                     .background(Color(0xFF1C1B1B), RoundedCornerShape(24.dp))
                     .padding(4.dp)
             ) {
-                val itemWidth = (maxWidth - (4.dp * (latencyPresets.size - 1))) / latencyPresets.size
-
-                // Sort by value but keep track of the original index to maintain "Box Identity"
-                val sortedWithIndices = latencyPresets.mapIndexed { i, v -> i to v }.sortedBy { it.second }
+                val spacing = 4.dp
+                val itemWidth = (maxWidth - (spacing * (latencyPresets.size - 1))) / latencyPresets.size
 
                 latencyPresets.forEachIndexed { index, preset ->
                     val isSelected = index == activeIndex
-                    val visualIndex = sortedWithIndices.indexOfFirst { it.first == index }
+                    val visualIndex = visualOrder.indexOf(index)
+                    val targetOffset = (itemWidth + spacing) * visualIndex
 
-                    LaunchedEffect(visualIndex) {
-                        haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                    }
-
-                    val targetOffset = (itemWidth + 4.dp) * visualIndex
                     val animatedX by animateDpAsState(
                         targetValue = targetOffset,
-                        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessLow),
-                        label = "bouncy_swap"
+                        animationSpec = spring(Spring.DampingRatioLowBouncy, Spring.StiffnessLow),
+                        label = "swap"
                     )
 
                     Box(
@@ -233,8 +250,9 @@ fun LatencyCard(
                             .fillMaxHeight()
                             .offset(x = animatedX)
                             .clip(RoundedCornerShape(20.dp))
-                            .background(if (isSelected) Color(0xFF403F44) else Color(0xFF2B2929))
+                            .background(if (isSelected) MaterialTheme.colorScheme.primary else Color(0xFF2B2929))
                             .clickable {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                 draggingIndex = index
                                 onLatencyChanged(preset)
                             },
@@ -242,7 +260,7 @@ fun LatencyCard(
                     ) {
                         Text(
                             text = "${preset}ms",
-                            color = if (isSelected) Color(0xFFB5F2B6) else Color(0xFFE6E1E3),
+                            color = if (isSelected) Color.Black else Color(0xFFE6E1E3),
                             style = MaterialTheme.typography.labelSmall,
                         )
                     }
@@ -251,33 +269,89 @@ fun LatencyCard(
 
             ExpressiveSlider(
                 value = latencyMs.toFloat(),
-                onValueChange = { newValue ->
-                    val intValue = newValue.toInt()
-
-                    // 1. If we don't know who is being dragged yet, find the closest match
-                    if (draggingIndex == -1) {
-                        draggingIndex = latencyPresets.indexOf(latencyMs)
-                    }
-
-                    // 2. Update engine
-                    onLatencyChanged(intValue)
-
-                    // 3. Update list memory using the locked index
-                    if (draggingIndex != -1) {
-                        val currentList = latencyPresets.toMutableList()
-
-                        // Collision check: Is some OTHER slot already using this value?
-                        val isColliding = currentList.mapIndexed { i, v -> i to v }
-                            .any { (i, v) -> i != draggingIndex && v == intValue }
-
-                        if (!isColliding) {
-                            currentList[draggingIndex] = intValue
-                            onLatencyPresetsChanged(currentList)
-                        }
-                    }
-                },
+                onValueChange = { updateLatency(it.toInt()) },
                 valueRange = 0f..500f,
                 modifier = Modifier.fillMaxWidth()
+            )
+
+            // --- FIXED: Fine-Tuning Row ---
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                listOf(-10, -1, 1, 10).forEach { amount ->
+                    // Call it directly. Since we are inside a Row,
+                    // the RowScope receiver is automatically available.
+                    FineTuneButton(
+                        amount = amount,
+                        // If your FineTuneButton doesn't accept a modifier yet,
+                        // you'll need to update its definition (see below).
+                        onClick = {
+                            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                            updateLatency(latencyMs + amount)
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun RowScope.FineTuneButton(
+    amount: Int,
+    onClick: () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+
+    // Logic: Force the animation to stay active for at least 100ms
+    var isAnimating by remember { mutableStateOf(false) }
+
+    LaunchedEffect(interactionSource) {
+        interactionSource.interactions.collectLatest { interaction ->
+            when (interaction) {
+                is PressInteraction.Press -> isAnimating = true
+                is PressInteraction.Release, is PressInteraction.Cancel -> {
+                    delay(100) // Minimum "hold" time for the animation to be visible
+                    isAnimating = false
+                }
+            }
+        }
+    }
+
+    val animatedWeight by animateFloatAsState(
+        targetValue = if (isAnimating) 1.3f else 1.0f,
+        animationSpec = spring(
+            dampingRatio = 0.5f, // Bouncier than MediumBouncy
+            stiffness = Spring.StiffnessMedium // Medium is more responsive for small buttons
+        ),
+        label = "weight_bounce"
+    )
+
+    val containerColor by animateColorAsState(
+        targetValue = if (isAnimating) MaterialTheme.colorScheme.primary else Color(0xFF2B2929),
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "color_fade"
+    )
+
+    Surface(
+        onClick = onClick,
+        interactionSource = interactionSource,
+        shape = RoundedCornerShape(16.dp),
+        color = containerColor,
+        modifier = Modifier
+            .weight(animatedWeight)
+            .fillMaxHeight()
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = if (amount > 0) "+$amount" else "$amount",
+                style = MaterialTheme.typography.labelMedium,
+                color = if (isAnimating)  Color(0xFF000000) else MaterialTheme.colorScheme.primary,
+                fontWeight = if (isAnimating) FontWeight.ExtraBold else FontWeight.Medium
             )
         }
     }
