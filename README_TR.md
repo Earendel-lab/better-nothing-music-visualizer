@@ -74,10 +74,10 @@ Gelin ve bize yardım edin! Katkılarınız çok makbule geçer!
 ### <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Symbols/Copyright.png" alt="Copyright" width="25" height="25" /> Emeği Geçenler:
 #### İşte bu projede yer alan kişiler:
 - [Aleks-Levet](https://github.com/Aleks-Levet) (Kurucu ve koordinatör, ana fikir, sahip)
-- [Nicouschulas](https://github.com/Nicouschulas) (Readme ve Wiki geliştirmeleri)
+- [Nicouschulas](https://github.com/Nicouschulas) (Beni oku (Readme) ve Wiki geliştirmeleri)
 - [rKyzen(a.k.a Shivank Dan)](https://github.com/rKyzen)  (Gerçek zamanlı müzik akışı ile Android Uygulama geliştiricisi)
 - [SebiAi](https://github.com/SebiAi) (Glif modlayıcı ve gliflerle ilgili yardımcı)
-- [Earnedel-lab](https://github.com/Earendel-lab) (Readme geliştirmeleri)
+- [Earnedel-lab](https://github.com/Earendel-lab) (Beni oku (Readme) geliştirmeleri)
 - [あけ なるかみ](https://github.com/Luke20YT) (Bu betikle entegre bir Müzik uygulaması yapan geliştirici)
 - [Interlastic](https://github.com/Interlastic) (Betiği kolayca denemek için Discord Botu) (Kullanımdan kaldırıldı)
 
