@@ -105,7 +105,7 @@ import kotlin.math.absoluteValue
 // Promoted to internal so MainViewModel can reference it without reflection.
 
 enum class Tab(val label: String) {
-    Audio("Audio"), Glyphs("Glyphs"), Haptics("Haptics"), Settings("Settings"), About("About");
+    Audio("Audio"), Glyphs("Glyphs"), Haptics("Vibration"), Settings("Settings"), About("About");
 
 }
 
@@ -702,11 +702,6 @@ private fun BetterVizApp(
         pageCount = { visibleTabsWithGhosts.size }
     )
 
-    // 1. Haptic feedback: Triggered when crossing the 50% threshold during manual swipe
-    LaunchedEffect(pagerState.currentPage) {
-            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-    }
-
 // 2. Sync Pager -> ViewModel (Logic moved here, removed haptics from here)
     LaunchedEffect(pagerState.settledPage) {
         if (pagerState.settledPage == 0) {
@@ -749,6 +744,7 @@ private fun BetterVizApp(
                 visibleTabs = rawVisibleTabs,
                 onTabSelected = { targetTab ->
                     val index = visibleTabsWithGhosts.indexOf(targetTab)
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     if (index != -1 && index != pagerState.currentPage) {
                         scope.launch {
                             pagerState.animateScrollToPage(index, animationSpec = BouncySpringSpec)

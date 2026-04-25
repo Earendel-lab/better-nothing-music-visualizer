@@ -5,7 +5,7 @@
     <!-- Audio Screen -->
     <string name="audio_screen_title">Better Nothing\nMusic Visualizer</string>
     <string name="audio_description_running">Real time audio visualizer is active. Your phone is now dancing to the beat! No content is saved, and privacy is respected.</string>
-    <string name="audio_description_idle">This app was made by Aleks Levet, rKyzen, and Oliver lebaigue.\nTo synchronize the Glyph Interface with your music, this app captures device audio. We use Media Projection for high-fidelity visualization.\n\nPrivacy Note: We only utilize the audio stream. No screen content is recorded.</string>
+    <string name="audio_description_idle">This app was made by Aleks Levet, rKyzen, and Oliver lebaigue.\n\nTo synchronize the Glyph Interface with your music, this app captures device audio. We use Media Projection for high-fidelity visualization.\n\nPrivacy Note: We only utilize the audio stream. No screen content is recorded.</string>
     <string name="auto_memorize_device">Auto-Memorize Device</string>
     <string name="saving_latency_for">Saving latency for: %s</string>
     <string name="internal_speaker">Internal Speaker</string>
@@ -33,8 +33,8 @@
     <string name="more_settings_coming">More settings coming soon...</string>
 
     <!-- Haptics Screen -->
-    <string name="haptics_title">Haptics</string>
-    <string name="haptics_description">Haptic visualisation is coming soon.</string>
+    <string name="haptics_title">Vibration</string>
+    <string name="haptics_description">Haptic visualization is coming soon.</string>
 
     <!-- About Screen -->
     <string name="about_title">About</string>
