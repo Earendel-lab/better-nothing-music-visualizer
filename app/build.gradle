@@ -76,6 +76,7 @@ dependencies {
     implementation 'androidx.compose.foundation:foundation-layout:1.10.6'
     implementation 'androidx.benchmark:benchmark-traceprocessor:1.4.1'
     implementation 'androidx.compose.runtime:runtime:1.10.6'
+    implementation 'androidx.compose.foundation:foundation-layout:1.11.0'
 
     // 8. Debugging
     debugImplementation 'androidx.compose.ui:ui-tooling'

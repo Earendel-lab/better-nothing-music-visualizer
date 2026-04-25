@@ -21,11 +21,11 @@ fun HapticsScreen() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .statusBarsPadding()
-            .padding(horizontal = 8.dp, vertical = 8.dp)
+            .padding(horizontal = 8.dp)
             .verticalScroll(scrollState),
         verticalArrangement = Arrangement.spacedBy(22.dp),
     ) {
+        Spacer(modifier = Modifier.height(20.dp))
         ScreenTitle(text = stringResource(R.string.haptics_title))
         BodyText(
             text = stringResource(R.string.haptics_description)

@@ -50,12 +50,7 @@ import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Vibration
 
 @Composable
-fun SettingsScreen(
-    glyphTabEnabled: Boolean,
-    hapticsTabEnabled: Boolean,
-    onGlyphTabToggle: (Boolean) -> Unit,
-    onHapticsTabToggle: (Boolean) -> Unit,
-) {
+fun SettingsScreen() {
     val context = LocalContext.current
     val prefs = remember(context) {
         context.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
@@ -75,32 +70,12 @@ fun SettingsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 8.dp, vertical = 8.dp)
-            .statusBarsPadding()
+            .padding(horizontal = 8.dp)
             .verticalScroll(scrollState),
         verticalArrangement = Arrangement.spacedBy(22.dp),
     ) {
+        Spacer(modifier = Modifier.height(20.dp))
         ScreenTitle(text = stringResource(R.string.settings_title))
-
-        TabVisibilityCard(
-            title = stringResource(R.string.glyph_tab),
-            description = stringResource(R.string.glyph_tab_description),
-            icon = {
-                Icon(Icons.Filled.GraphicEq, contentDescription = null, tint = Color(0xFFE7E0E7))
-            },
-            checked = glyphTabEnabled,
-            onCheckedChange = onGlyphTabToggle,
-        )
-
-        TabVisibilityCard(
-            title = stringResource(R.string.haptics_tab),
-            description = stringResource(R.string.haptics_tab_description),
-            icon = {
-                Icon(Icons.Filled.Vibration, contentDescription = null, tint = Color(0xFFE7E0E7))
-            },
-            checked = hapticsTabEnabled,
-            onCheckedChange = onHapticsTabToggle,
-        )
 
         SettingDropdown(
             title = stringResource(R.string.app_theme),
@@ -134,88 +109,6 @@ fun SettingsScreen(
 
         BodyText(text = stringResource(R.string.more_settings_coming))
         Spacer(modifier = Modifier.height(28.dp))
-    }
-}
-
-@Composable
-private fun TabVisibilityCard(
-    title: String,
-    description: String,
-    icon: @Composable () -> Unit,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    val containerColor by animateColorAsState(
-        targetValue = if (checked) Color(0xFF2D332F) else Color(0xFF1D1B1C),
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow,
-        ),
-        label = "settings_toggle_card",
-    )
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(28.dp),
-        colors = CardDefaults.cardColors(containerColor = containerColor),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                modifier = Modifier
-                    .background(Color(0xFF2A2829), RoundedCornerShape(18.dp))
-                    .padding(12.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                icon()
-            }
-
-            Spacer(modifier = Modifier.width(14.dp))
-
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color.White,
-                )
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFFB8B8B8),
-                )
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Switch(
-                checked = checked,
-                onCheckedChange = onCheckedChange,
-                thumbContent = {
-                    if (checked) {
-                        Icon(
-                            imageVector = Icons.Filled.Check,
-                            contentDescription = null,
-                            modifier = Modifier.padding(2.dp),
-                        )
-                    }
-                },
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color(0xFFB5F2B6),
-                    checkedTrackColor = Color(0xFF49554A),
-                    checkedBorderColor = Color.Transparent,
-                    uncheckedThumbColor = Color(0xFFE7E0E7),
-                    uncheckedTrackColor = Color(0xFF3D3B3C),
-                    uncheckedBorderColor = Color.Transparent,
-                ),
-            )
-        }
     }
 }
 

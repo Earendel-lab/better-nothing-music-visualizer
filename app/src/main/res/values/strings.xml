@@ -17,7 +17,7 @@
     <string name="glyph_controls">Glyph controls</string>
     <string name="gamma_control">Gamma control</string>
     <string name="gamma_description">A higher gamma value gives a more punchy look, but with less subtle details and overall brightness. A lower one is brighter but less punchy.</string>
-    <string name="light_gamma">Light Gamma: %.2f</string>
+    <string name="light_gamma">Light Gamma: %.1f</string>
     <string name="visualizer_presets">Visualizer presets</string>
 
     <!-- Settings Screen -->

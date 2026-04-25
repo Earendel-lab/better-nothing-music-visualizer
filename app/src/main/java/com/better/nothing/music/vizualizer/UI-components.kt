@@ -106,7 +106,7 @@ fun BodyText(
                 fontWeight = FontWeight.Normal,
             )
         },
-        color    = Color(0xFFB8B8B8),
+        color    = Color(0xFFD0D0D0),
         modifier = modifier,
     )
 }
@@ -174,7 +174,7 @@ fun StartStopButton(
 
     FloatingActionButton(
         onClick           = {
-            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+            haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
             onClick()
         },
         interactionSource = interactionSource,
@@ -222,7 +222,6 @@ fun NativeBottomBar(
     NavigationBar(
         modifier = Modifier
             .height(64.dp)
-            .navigationBarsPadding()
             .animateContentSize(
                 animationSpec = spring(
                     dampingRatio = Spring.DampingRatioMediumBouncy,
@@ -262,11 +261,11 @@ fun NativeBottomBar(
                     )
                 },
                 colors = NavigationBarItemDefaults.colors(
-                    indicatorColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                    indicatorColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     selectedIconColor = MaterialTheme.colorScheme.onBackground,
                     selectedTextColor = MaterialTheme.colorScheme.onBackground,
-                    unselectedIconColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    unselectedTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    unselectedIconColor = MaterialTheme.colorScheme.onSurface,
+                    unselectedTextColor = MaterialTheme.colorScheme.onSurface
                 )
             )
         }
@@ -349,7 +348,7 @@ fun ExpressiveSlider(
                 trackInsideCornerSize = 2.dp,
                 colors = SliderDefaults.colors(
                     activeTrackColor = MaterialTheme.colorScheme.primary,
-                    inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant
+                    inactiveTrackColor = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             )
         }
@@ -405,17 +404,17 @@ fun BetterVizTheme(content: @Composable () -> Unit) {
     } else {
         androidx.compose.material3.darkColorScheme(
             background = Color.Black,
-            surface = Color(0xFF141414),
-            primary = Color(0xFFD8D3DA),    // Silver/White accent
-            secondary = Color(0xFFB5F2B6),  // Nothing Mint Green
-            error = Color(0xFFEE0000),
+            surface = Color(0xFF232323),
+            primary = Color(0xFFD8D3DA),
+            secondary = Color(0xFFA0FFA3),
+            error = Color(0xFFC83B3B),
             onBackground = Color.White,
             onSurface = Color.White,
             onPrimary = Color(0xFF1C1A1D),
             onSecondary = Color(0xFF1C5A21),
             onError = Color.White,
             surfaceVariant = Color(0xFF242424),
-            onSurfaceVariant = Color(0xFF8C8C8C),
+            onSurfaceVariant = Color(0xFF676767),
             outline = Color(0xFF2C2C2C)
         )
     }
