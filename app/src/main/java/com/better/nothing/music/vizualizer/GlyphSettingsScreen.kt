@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
 import kotlin.math.pow
 
 @Composable
@@ -63,10 +64,10 @@ fun GlyphsScreen(
             .verticalScroll(mainScrollState),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        ScreenTitle(text = "Glyph controls")
+        ScreenTitle(text = stringResource(R.string.glyph_controls))
 
         Text(
-            text = "Gamma control",
+            text = stringResource(R.string.gamma_control),
             style = MaterialTheme.typography.headlineMedium,
             color = Color(0xFFD2D2D2),
         )
@@ -78,8 +79,7 @@ fun GlyphsScreen(
         ) {
             GammaPreviewCard(gammaValue = gammaValue)
             BodyText(
-                text = "A higher gamma value gives a more punchy look, but with less subtle details " +
-                        "and overall brightness. A lower one is brighter but less punchy.",
+                text = stringResource(R.string.gamma_description),
                 modifier = Modifier.weight(1f),
                 size = 14.sp,
                 lineHeight = 22.sp,
@@ -89,7 +89,7 @@ fun GlyphsScreen(
         GammaCard(gammaValue = gammaValue, onGammaChanged = onGammaChanged)
 
         Text(
-            text = "Visualizer presets",
+            text = stringResource(R.string.visualizer_presets),
             modifier = Modifier.padding(top = 20.dp),
             style = MaterialTheme.typography.headlineMedium,
             color = Color(0xFFD2D2D2),
@@ -157,7 +157,7 @@ fun GammaCard(
 ) {
     // Format only when gammaValue changes, not every recomposition.
     val gammaLabel = remember(gammaValue) {
-        "Light Gamma: ${"%.2f".format(gammaValue)}"
+        stringResource(R.string.light_gamma).format(gammaValue)
     }
 
     Card(

@@ -12,6 +12,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 
 @Composable
 fun AboutScreen() {
@@ -24,9 +25,9 @@ fun AboutScreen() {
             .verticalScroll(scrollState),
         verticalArrangement = Arrangement.spacedBy(22.dp),
     ) {
-        ScreenTitle(text = "About & other")
+        ScreenTitle(text = stringResource(R.string.about_title))
         BodyText(
-            text = "WE NEED A PROPER FUckING ABOUT SCREEN!! Look at the github for info in the meantime pls"
+            text = stringResource(R.string.about_description)
         )
         Spacer(modifier = Modifier.height(28.dp))
     }

@@ -42,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.GraphicEq
@@ -79,11 +80,11 @@ fun SettingsScreen(
             .verticalScroll(scrollState),
         verticalArrangement = Arrangement.spacedBy(22.dp),
     ) {
-        ScreenTitle(text = "Settings")
+        ScreenTitle(text = stringResource(R.string.settings_title))
 
         TabVisibilityCard(
-            title = "Glyph Tab",
-            description = "Show or hide the glyph controls tab from the bottom navigation.",
+            title = stringResource(R.string.glyph_tab),
+            description = stringResource(R.string.glyph_tab_description),
             icon = {
                 Icon(Icons.Filled.GraphicEq, contentDescription = null, tint = Color(0xFFE7E0E7))
             },
@@ -92,8 +93,8 @@ fun SettingsScreen(
         )
 
         TabVisibilityCard(
-            title = "Haptics Tab",
-            description = "Show or hide the haptics tools tab from the bottom navigation.",
+            title = stringResource(R.string.haptics_tab),
+            description = stringResource(R.string.haptics_tab_description),
             icon = {
                 Icon(Icons.Filled.Vibration, contentDescription = null, tint = Color(0xFFE7E0E7))
             },
@@ -102,36 +103,36 @@ fun SettingsScreen(
         )
 
         SettingDropdown(
-            title = "App Theme",
+            title = stringResource(R.string.app_theme),
             value = selectedTheme,
             expanded = themeExpanded,
             onExpandedChange = { themeExpanded = !themeExpanded },
             onDismiss = { themeExpanded = false },
-            options = listOf("Normal", "Nothing Red"),
+            options = listOf(stringResource(R.string.theme_normal), stringResource(R.string.theme_nothing_red)),
             onSelect = { theme ->
                 prefs.edit().putString("selected_theme", theme).apply()
                 selectedTheme = theme
                 themeExpanded = false
             },
-            helperText = "Changes apply immediately and persist across app restarts."
+            helperText = stringResource(R.string.theme_help_text)
         )
 
         SettingDropdown(
-            title = "Typography",
+            title = stringResource(R.string.typography),
             value = selectedFont,
             expanded = fontExpanded,
             onExpandedChange = { fontExpanded = !fontExpanded },
             onDismiss = { fontExpanded = false },
-            options = listOf("NDot", "NType"),
+            options = listOf(stringResource(R.string.font_ndot), stringResource(R.string.font_ntype)),
             onSelect = { font ->
                 prefs.edit().putString("selected_font", font).apply()
                 selectedFont = font
                 fontExpanded = false
             },
-            helperText = "Toggle between NDot and NType fonts app-wide."
+            helperText = stringResource(R.string.typography_help_text)
         )
 
-        BodyText(text = "More settings coming soon...")
+        BodyText(text = stringResource(R.string.more_settings_coming))
         Spacer(modifier = Modifier.height(28.dp))
     }
 }
