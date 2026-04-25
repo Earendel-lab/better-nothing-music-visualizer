@@ -721,8 +721,6 @@ private fun BetterVizApp(
                 onTabSelected = { targetTab ->
                     val index = Tabs.indexOf(targetTab)
                     if (index != -1 && index != pagerState.currentPage) {
-                        // Immediate haptic for the button click
-                        haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                         scope.launch {
                             pagerState.animateScrollToPage(index, animationSpec = BouncySpringSpec)
                         }
