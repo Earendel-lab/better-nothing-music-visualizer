@@ -93,7 +93,8 @@ fun AudioScreen(
             "Real time audio visualizer is active. Your phone is now dancing to the beat! " +
                     "No content is saved, and privacy is respected."
         } else {
-            "To synchronize the Glyph Interface with your music, this app captures " +
+            "This app was made by Aleks Levet, rKyzen, and Oliver lebaigue.
+            \nTo synchronize the Glyph Interface with your music, this app captures " +
                     "device audio. We use Media Projection for high-fidelity visualization.\n\n" +
                     "Privacy Note: We only utilize the audio stream. No screen content is recorded."
         }
@@ -219,7 +220,9 @@ fun LatencyCard(
             Text(
                 text = "Latency Compensation",
                 color = Color(0xFFE6E1E3),
-                style = MaterialTheme.typography.titleMedium
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.fillMaxWidth(), // Necessary to see the alignment effect
+                textAlign = TextAlign.Center
             )
 
             // --- Presets Selector ---
