@@ -31,6 +31,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 
@@ -87,15 +88,12 @@ fun AudioScreen(
             .verticalScroll(scrollState),
         verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
-        ScreenTitle(text = "Better Nothing\nMusic Visualizer")
+        ScreenTitle(text = stringResource(R.string.audio_screen_title))
 
         val descriptionText = if (isRunning) {
-            "Real time audio visualizer is active. Your phone is now dancing to the beat! " +
-                    "No content is saved, and privacy is respected."
+            stringResource(R.string.audio_description_running)
         } else {
-            "To synchronize the Glyph Interface with your music, this app captures " +
-                    "device audio. We use Media Projection for high-fidelity visualization.\n\n" +
-                    "Privacy Note: We only utilize the audio stream. No screen content is recorded."
+            stringResource(R.string.audio_description_idle)
         }
         BodyText(text = descriptionText)
 
@@ -109,8 +107,7 @@ fun AudioScreen(
                 )
 
                 BodyText(
-                    text = "Latency compensation ensures Glyphs hit exactly on the beat, " +
-                            "especially useful for Bluetooth devices."
+                    text = stringResource(R.string.latency_compensation_description)
                 )
 
                 LatencyCard(
@@ -144,14 +141,14 @@ fun AutoDeviceCard(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Auto-Memorize Device",
+                    text = stringResource(R.string.auto_memorize_device),
                     color = Color.White,
                     style = MaterialTheme.typography.titleSmall
                 )
                 Text(
                     text = if (enabled)
-                        "Saving latency for: ${deviceName ?: "Internal Speaker"}"
-                    else "Manual mode (Global latency)",
+                        stringResource(R.string.saving_latency_for, deviceName ?: stringResource(R.string.internal_speaker))
+                    else stringResource(R.string.manual_mode_global_latency),
                     color = Color.Gray,
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -217,9 +214,11 @@ fun LatencyCard(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                text = "Latency Compensation",
+                text = stringResource(R.string.latency_compensation),
                 color = Color(0xFFE6E1E3),
-                style = MaterialTheme.typography.titleMedium
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.fillMaxWidth(), // Necessary to see the alignment effect
+                textAlign = TextAlign.Center
             )
 
             // --- Presets Selector ---

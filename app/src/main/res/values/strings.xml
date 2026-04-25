@@ -1,4 +1,46 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Better Nothing Music Visualizer</string>
+
+    <!-- Audio Screen -->
+    <string name="audio_screen_title">Better Nothing\nMusic Visualizer</string>
+    <string name="audio_description_running">Real time audio visualizer is active. Your phone is now dancing to the beat! No content is saved, and privacy is respected.</string>
+    <string name="audio_description_idle">This app was made by Aleks Levet, rKyzen, and Oliver lebaigue.\nTo synchronize the Glyph Interface with your music, this app captures device audio. We use Media Projection for high-fidelity visualization.\n\nPrivacy Note: We only utilize the audio stream. No screen content is recorded.</string>
+    <string name="auto_memorize_device">Auto-Memorize Device</string>
+    <string name="saving_latency_for">Saving latency for: %s</string>
+    <string name="internal_speaker">Internal Speaker</string>
+    <string name="manual_mode_global_latency">Manual mode (Global latency)</string>
+    <string name="latency_compensation_description">Latency compensation ensures Glyphs hit exactly on the beat, especially useful for Bluetooth devices.</string>
+    <string name="latency_compensation">Latency Compensation</string>
+
+    <!-- Glyph Screen -->
+    <string name="glyph_controls">Glyph controls</string>
+    <string name="gamma_control">Gamma control</string>
+    <string name="gamma_description">A higher gamma value gives a more punchy look, but with less subtle details and overall brightness. A lower one is brighter but less punchy.</string>
+    <string name="light_gamma">Light Gamma: %.2f</string>
+    <string name="visualizer_presets">Visualizer presets</string>
+
+    <!-- Settings Screen -->
+    <string name="settings_title">Settings</string>
+    <string name="glyph_tab">Glyph Tab</string>
+    <string name="glyph_tab_description">Show or hide the glyph controls tab from the bottom navigation.</string>
+    <string name="haptics_tab">Haptics Tab</string>
+    <string name="haptics_tab_description">Show or hide the haptics tools tab from the bottom navigation.</string>
+    <string name="app_theme">App Theme</string>
+    <string name="theme_normal">Normal</string>
+    <string name="theme_nothing_red">Nothing Red</string>
+    <string name="theme_help_text">Changes apply immediately and persist across app restarts.</string>
+    <string name="typography">Typography</string>
+    <string name="font_ndot">NDot</string>
+    <string name="font_ntype">NType</string>
+    <string name="typography_help_text">Toggle between NDot and NType fonts app-wide.</string>
+    <string name="more_settings_coming">More settings coming soon...</string>
+
+    <!-- Haptics Screen -->
+    <string name="haptics_title">Haptics</string>
+    <string name="haptics_description">Haptic tools are coming here next. This page is ready for vibration presets, pattern testing, and per-event feedback settings.</string>
+
+    <!-- About Screen -->
+    <string name="about_title">About &amp; other</string>
+    <string name="about_description">WE NEED A PROPER FUckING ABOUT SCREEN!! Look at the github for info in the meantime pls</string>
 </resources>

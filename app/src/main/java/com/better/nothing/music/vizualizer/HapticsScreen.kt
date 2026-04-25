@@ -12,6 +12,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 
 @Composable
 fun HapticsScreen() {
@@ -25,10 +26,9 @@ fun HapticsScreen() {
             .verticalScroll(scrollState),
         verticalArrangement = Arrangement.spacedBy(22.dp),
     ) {
-        ScreenTitle(text = "Haptics")
+        ScreenTitle(text = stringResource(R.string.haptics_title))
         BodyText(
-            text = "Haptic tools are coming here next. This page is ready for vibration presets, " +
-                "pattern testing, and per-event feedback settings."
+            text = stringResource(R.string.haptics_description)
         )
         Spacer(modifier = Modifier.height(28.dp))
     }
