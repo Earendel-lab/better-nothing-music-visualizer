@@ -2,7 +2,6 @@
 
 package com.better.nothing.music.vizualizer
 
-import android.os.Build
 import android.view.MotionEvent
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
