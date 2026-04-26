@@ -35,8 +35,6 @@
     <string name="more_settings_coming">More settings coming soon...</string>
 
     <!-- Haptics Screen -->
-    <string name="haptics_title">Vibration</string>
-    <string name="haptics_description">Haptic visualization is coming soon.</string>
     <string name="haptics_header">Haptics</string>
     <string name="haptics_subtitle">Audio-reactive vibration settings.</string>
     <string name="haptics_motor_title">Audio-Reactive Haptics</string>
@@ -69,12 +67,18 @@
     <string name="about_why_2">• 60 FPS fluid animations vs ~25 FPS stock</string>
     <string name="about_why_3">• Precise FFT sync vs semi-random response</string>
     <string name="about_why_4">• Independent sub-zone control</string>
-    <string name="about_section_team">The Team:</string>
-    <string name="about_team_1">• Aleks Levet: Founder, Dev, Coordinator, UI, presets, and Visualizer engine</string>
-    <string name="about_team_2">• rKyzen (Shivank Dan): Android Developer, App initial structure</string>
-    <string name="about_team_3">• Oliver lebaigue: Android Developer, UX tweaks</string>
-    <string name="about_team_4">• Nicouschulas: Documentation &amp; Wiki</string>
-    <string name="about_team_5">• SebiAi: Glyph Modder &amp; Technical Help</string>
-    <string name="about_team_6">• ItzNotHj: UI/UX &amp; Design</string>
-    <string name="about_team_7">• Interlastic: Original Discord Bot</string>
+    <string name="github_repository">GitHub Repository</string>
+    <string name="view_source">View Source</string>
+    <string name="version_info">Version %s</string>
+    <string name="media_projection_info">MediaProjection is used only to power the real-time visualizer. No unnecessary recording or data storage is performed.</string>
+    <string name="credits">Credits</string>
+    <string name="open_github_profile">Open GitHub profile</string>
+    <string name="credit_alekslevet_role">Founder, coordinator, main idea, owner</string>
+    <string name="credit_rkyzen_role">Android app developer (real-time music stream)</string>
+    <string name="credit_oliver_role">developer</string>
+    <string name="credit_nicouschulas_role">Readme &amp; Wiki enhancements</string>
+    <string name="credit_sebiai_role">Glyph modding and support</string>
+    <string name="credit_earnedel_role">Readme enhancements</string>
+    <string name="credit_ake_role">Developer working on a music app with integration</string>
+    <string name="credit_interlastic_role">Discord bot for testing the script (deprecated)</string>
 </resources>

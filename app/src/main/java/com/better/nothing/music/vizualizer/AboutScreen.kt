@@ -31,14 +31,14 @@ fun AboutScreen() {
     val scrollState = rememberScrollState()
     val uriHandler = LocalUriHandler.current
     val credits = listOf(
-        CreditEntry("Aleks-Levet", "Founder, coordinator, main idea, owner", "Aleks-Levet"),
-        CreditEntry("rKyzen (aka Shivank Dan)", "Android app developer (real-time music stream)", "rKyzen"),
-        CreditEntry("Oliver Lebaigue", "developer", githubUsername = "oliver-leabigue-bright-bench"),
-        CreditEntry("Nicouschulas", "Readme & Wiki enhancements", "Nicouschulas"),
-        CreditEntry("SebiAi", "Glyph modding and support", "SebiAi"),
-        CreditEntry("Earnedel-lab", "Readme enhancements", "Earnedel-lab"),
-        CreditEntry("あけ なるかみ", "Developer working on a music app with integration", null),
-        CreditEntry("Interlastic", "Discord bot for testing the script (deprecated)", "Interlastic"),
+        CreditEntry("Aleks-Levet", stringResource(R.string.credit_alekslevet_role), "Aleks-Levet"),
+        CreditEntry("rKyzen (aka Shivank Dan)", stringResource(R.string.credit_rkyzen_role), "rKyzen"),
+        CreditEntry("Oliver Lebaigue", stringResource(R.string.credit_oliver_role), githubUsername = "oliver-leabigue-bright-bench"),
+        CreditEntry("Nicouschulas", stringResource(R.string.credit_nicouschulas_role), "Nicouschulas"),
+        CreditEntry("SebiAi", stringResource(R.string.credit_sebiai_role), "SebiAi"),
+        CreditEntry("Earnedel-lab", stringResource(R.string.credit_earnedel_role), "Earnedel-lab"),
+        CreditEntry("あけ なるかみ", stringResource(R.string.credit_ake_role), null),
+        CreditEntry("Interlastic", stringResource(R.string.credit_interlastic_role), "Interlastic"),
     )
 
     Column(
@@ -70,13 +70,13 @@ fun AboutScreen() {
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "GitHub Repository",
+                    text = stringResource(R.string.github_repository),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f)
                 )
                 Text(
-                    text = "View Source",
+                    text = stringResource(R.string.view_source),
                     style = MaterialTheme.typography.labelMedium,
                     color = Color(0xFFAAAAAA),
                 )
@@ -93,12 +93,12 @@ fun AboutScreen() {
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
-                    text = "Version ${BuildConfig.VERSION_NAME}",
+                    text = stringResource(R.string.version_info, BuildConfig.VERSION_NAME),
                     style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.onBackground,
                 )
                 BodyText(
-                    text = "MediaProjection is used only to power the real-time visualizer. No unnecessary recording or data storage is performed.",
+                    text = stringResource(R.string.media_projection_info),
                     size = 14.sp,
                     lineHeight = 20.sp,
                 )
@@ -114,7 +114,7 @@ fun AboutScreen() {
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            BodyText(text = "Credits", size = 20.sp)
+            BodyText(text = stringResource(R.string.credits), size = 20.sp)
             credits.forEach { credit ->
                 Card(
                     shape = RoundedCornerShape(24.dp),
@@ -159,7 +159,7 @@ fun AboutScreen() {
                                     color = MaterialTheme.colorScheme.primary,
                                 )
                                 Text(
-                                    text = "Open GitHub profile",
+                                    text = stringResource(R.string.open_github_profile),
                                     style = MaterialTheme.typography.labelMedium,
                                     color = Color(0xFFAAAAAA),
                                 )
