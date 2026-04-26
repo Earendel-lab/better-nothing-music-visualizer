@@ -101,6 +101,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 import kotlin.math.absoluteValue
 
 
@@ -206,6 +210,58 @@ internal class MainViewModel(application: Application) : AndroidViewModel(applic
 
     private val _hapticsTabEnabled = MutableStateFlow(true)
     val hapticsTabEnabled = _hapticsTabEnabled.asStateFlow()
+
+    // ── Zones Update ──────────────────────────────────────────────────────────
+    private val _configUpdateStatus = MutableStateFlow<ConfigUpdateStatus>(ConfigUpdateStatus.Idle)
+    val configUpdateStatus = _configUpdateStatus.asStateFlow()
+
+    sealed class ConfigUpdateStatus {
+        object Idle : ConfigUpdateStatus()
+        object Updating : ConfigUpdateStatus()
+        data class Success(val message: String) : ConfigUpdateStatus()
+        data class Error(val message: String) : ConfigUpdateStatus()
+    }
+
+    fun updateZonesConfig() {
+        viewModelScope.launch(Dispatchers.IO) {
+            performUpdateAction()
+        }
+    }
+
+    private suspend fun performUpdateAction(): Boolean {
+        _configUpdateStatus.value = ConfigUpdateStatus.Updating
+        return try {
+            val url = URL("https://raw.githubusercontent.com/Aleks-Levet/better-nothing-music-visualizer/main/zones.config")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.connectTimeout = 10000
+            connection.readTimeout = 10000
+
+            if (connection.responseCode == HttpURLConnection.HTTP_OK) {
+                val content = connection.inputStream.bufferedReader().use { it.readText() }
+                // Basic validation
+                JSONObject(content)
+
+                val file = File(ctx.filesDir, "zones.config")
+                file.writeText(content)
+
+                _configUpdateStatus.value = ConfigUpdateStatus.Success("Successfully updated zones.config")
+                refreshPresetsInternal()
+                // Force running service to reload its config from disk
+                MainActivity.serviceStatic?.reloadConfig()
+                true
+            } else {
+                _configUpdateStatus.value = ConfigUpdateStatus.Error("Failed to download: ${connection.responseCode}")
+                false
+            }
+        } catch (e: Exception) {
+            _configUpdateStatus.value = ConfigUpdateStatus.Error("Error updating: ${e.message}")
+            false
+        }
+    }
+
+    fun resetConfigUpdateStatus() {
+        _configUpdateStatus.value = ConfigUpdateStatus.Idle
+    }
 
     // ── Theme & Font ─────────────────────────────────────────────────────────
     private val _selectedTheme = MutableStateFlow("OLED Black")
@@ -326,6 +382,14 @@ internal class MainViewModel(application: Application) : AndroidViewModel(applic
 
             // Load I/O in parallel using IO dispatcher
             launch(Dispatchers.IO) {
+                // Force update on first run if config is missing
+                val internalFile = File(ctx.filesDir, "zones.config")
+                val hasAsset = try { ctx.assets.open("zones.config").use { true } } catch (e: Exception) { false }
+
+                if (!internalFile.exists() && !hasAsset) {
+                    performUpdateAction()
+                }
+
                 val gamma = AudioCaptureService.loadGamma(ctx)
                 val latency = AudioCaptureService.loadLatencyCompensationMs(
                     ctx,
@@ -387,9 +451,17 @@ internal class MainViewModel(application: Application) : AndroidViewModel(applic
     /** Reloads preset list from disk; safe to call from the main thread. */
     fun refreshPresets() {
         viewModelScope.launch(Dispatchers.IO) {
-            val infos = AudioCaptureService.loadPresetInfos(ctx, selectedDevice.value)
-            withContext(Dispatchers.Main.immediate) { commitPresetInfos(infos) }
+            refreshPresetsInternal()
         }
+    }
+
+    private suspend fun refreshPresetsInternal() {
+        // First clear to ensure UI refresh if somehow the data is merged
+        withContext(Dispatchers.Main.immediate) {
+            _presetInfos.value = emptyList()
+        }
+        val infos = AudioCaptureService.loadPresetInfos(ctx, selectedDevice.value)
+        withContext(Dispatchers.Main.immediate) { commitPresetInfos(infos) }
     }
 
     /** Updates preset list in state and persists it; save is off main thread. */

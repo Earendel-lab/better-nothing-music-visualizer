@@ -1,6 +1,7 @@
 package com.better.nothing.music.vizualizer
 
 import android.content.Context
+import android.widget.Toast
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -19,8 +20,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -33,6 +36,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,6 +52,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Vibration
+import androidx.compose.foundation.layout.size
 
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
@@ -81,7 +86,9 @@ internal fun SettingsScreen(viewModel: MainViewModel) {
                 "OLED Black",
                 "Liquorice Black",
                 "Nothing Light",
-                "Nothing Red"
+                "Nothing Red",
+                "Material You",
+                "Material You Light"
             ),
             onSelect = { theme ->
                 viewModel.setSelectedTheme(theme)
@@ -103,6 +110,73 @@ internal fun SettingsScreen(viewModel: MainViewModel) {
             },
             helperText = stringResource(R.string.typography_help_text)
         )
+
+        // ── Zones Configuration ──────────────────────────────────────────────
+        val configStatus by viewModel.configUpdateStatus.collectAsStateWithLifecycle()
+        val context = LocalContext.current
+
+        LaunchedEffect(configStatus) {
+            when (val status = configStatus) {
+                is MainViewModel.ConfigUpdateStatus.Success -> {
+                    Toast.makeText(context, status.message, Toast.LENGTH_SHORT).show()
+                    viewModel.resetConfigUpdateStatus()
+                }
+                is MainViewModel.ConfigUpdateStatus.Error -> {
+                    Toast.makeText(context, status.message, Toast.LENGTH_LONG).show()
+                    viewModel.resetConfigUpdateStatus()
+                }
+                else -> {}
+            }
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = "Visualizer Configuration",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
+
+            Card(
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        text = "Zones Configuration",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = "The zones.config file defines how frequencies map to Glyph LEDs. You can update it from GitHub to get the latest presets and device support.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.Gray,
+                    )
+
+                    Button(
+                        onClick = { viewModel.updateZonesConfig() },
+                        enabled = configStatus is MainViewModel.ConfigUpdateStatus.Idle,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        if (configStatus is MainViewModel.ConfigUpdateStatus.Updating) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Updating...")
+                        } else {
+                            Text("Check for Updates")
+                        }
+                    }
+                }
+            }
+        }
 
         BodyText(text = stringResource(R.string.more_settings_coming))
         Spacer(modifier = Modifier.height(28.dp))

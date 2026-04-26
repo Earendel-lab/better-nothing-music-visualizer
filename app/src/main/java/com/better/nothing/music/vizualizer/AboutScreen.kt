@@ -32,13 +32,13 @@ fun AboutScreen() {
     val uriHandler = LocalUriHandler.current
     val credits = listOf(
         CreditEntry("Aleks-Levet", "Founder, coordinator, main idea, owner", "Aleks-Levet"),
-        CreditEntry("Nicouschulas", "Readme & Wiki enhancements", "Nicouschulas"),
         CreditEntry("rKyzen (aka Shivank Dan)", "Android app developer (real-time music stream)", "rKyzen"),
+        CreditEntry("Oliver Lebaigue", "developer", githubUsername = "oliver-leabigue-bright-bench"),
+        CreditEntry("Nicouschulas", "Readme & Wiki enhancements", "Nicouschulas"),
         CreditEntry("SebiAi", "Glyph modding and support", "SebiAi"),
         CreditEntry("Earnedel-lab", "Readme enhancements", "Earnedel-lab"),
         CreditEntry("あけ なるかみ", "Developer working on a music app with integration", null),
         CreditEntry("Interlastic", "Discord bot for testing the script (deprecated)", "Interlastic"),
-        CreditEntry("Oliver Lebaigue", "", null),
     )
 
     Column(
@@ -54,6 +54,34 @@ fun AboutScreen() {
         BodyText(
             text = stringResource(R.string.about_intro)
         )
+
+        Card(
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable {
+                    uriHandler.openUri("https://github.com/Aleks-Levet/better-nothing-music-visualizer")
+                },
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "GitHub Repository",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = "View Source",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color(0xFFAAAAAA),
+                )
+            }
+        }
 
         Card(
             shape = RoundedCornerShape(24.dp),

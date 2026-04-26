@@ -138,7 +138,7 @@ internal fun GlyphsScreen(
                 animationSpec = spring(stiffness = Spring.StiffnessMedium)
             ) { description ->
                 Text(
-                    text = description ?: "Text describing the preset in a nice way.",
+                    text = description ?: "No configuration loaded. Please check for updates in Settings to download the latest visualizer presets.",
                     style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 22.sp),
                     color = Color(0xFFFFFFFF),
                     modifier = Modifier

@@ -487,6 +487,27 @@ public class AudioCaptureService extends Service {
         applyPresetSelection(presetSelection.trim());
     }
 
+    public void reloadConfig() {
+        mWorkerHandler.post(() -> {
+            try {
+                refreshPresetCatalog();
+                // If current preset is now missing, fall back
+                if (!mAvailablePresetKeys.contains(mPresetKey)) {
+                    String fallback = resolvePresetKey(null, mAvailablePresetKeys);
+                    applyPresetSelection(fallback);
+                } else {
+                    // Even if key is same, config content might have changed
+                    mVisualizerConfig = loadVisualizerConfig(mPresetKey);
+                    mPresetConfigVersion++;
+                    resetVisualizerState();
+                    refreshNotification();
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Failed to reload config", e);
+            }
+        });
+    }
+
     public void setDevice(int device) {
         mSelectedDevice = device;
         setLatencyCompensationMs(loadLatencyCompensationMs(this, device));
@@ -1326,15 +1347,6 @@ public class AudioCaptureService extends Service {
     }
 
     private static String loadZonesConfigText(Context context) throws IOException {
-        InputStream inputStream = null;
-        try {
-            inputStream = context.getAssets().open("zones.config");
-            return readFully(inputStream);
-        } catch (IOException ignored) {
-        } finally {
-            closeQuietly(inputStream);
-        }
-
         File externalDir = context.getExternalFilesDir(null);
         File[] candidates = new File[]{
                 new File(context.getFilesDir(), "zones.config"),
@@ -1346,6 +1358,15 @@ public class AudioCaptureService extends Service {
             if (candidate != null && candidate.isFile()) {
                 return readFile(candidate);
             }
+        }
+
+        InputStream inputStream = null;
+        try {
+            inputStream = context.getAssets().open("zones.config");
+            return readFully(inputStream);
+        } catch (IOException ignored) {
+        } finally {
+            closeQuietly(inputStream);
         }
 
         throw new FileNotFoundException("zones.config not found");
