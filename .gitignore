@@ -1,9 +1,11 @@
-local.properties
 build/
 .gradle/
 .idea/
-app/build/
 .codex
 .vscode/
+local.properties
 
-
+# ignore everything inside app/build except apk outputs
+app/build/*
+!app/build/outputs/
+!app/build/outputs/apk/
