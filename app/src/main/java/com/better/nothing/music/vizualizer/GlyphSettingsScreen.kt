@@ -30,18 +30,19 @@ import kotlin.math.*
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun GlyphsScreen(
+internal fun GlyphsScreen(
     gammaValue: Float,
     onGammaChanged: (Float) -> Unit,
     presets: List<AudioCaptureService.PresetInfo>,
     selectedPreset: String,
     onPresetSelected: (String) -> Unit,
     isRunning: Boolean,
-    vizState: FloatArray,
     selectedDevice: Int,
+    viewModel: MainViewModel,
 ) {
     val mainScrollState = rememberScrollState()
 
@@ -59,22 +60,12 @@ fun GlyphsScreen(
     ) {
         Spacer(modifier = Modifier.height(20.dp))
 
-        if (isRunning) {
-            GlyphPreview(
-                vizState = vizState,
-                device = selectedDevice,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(400.dp)
-            )
-        }
-
         ScreenTitle(text = stringResource(R.string.glyph_controls))
 
         Text(
             text = stringResource(R.string.gamma_control),
             style = MaterialTheme.typography.headlineMedium,
-            color = Color(0xFFD2D2D2),
+            color = MaterialTheme.colorScheme.onBackground,
         )
 
         Row(
@@ -97,7 +88,7 @@ fun GlyphsScreen(
             text = stringResource(R.string.visualizer_presets),
             modifier = Modifier.padding(top = 20.dp),
             style = MaterialTheme.typography.headlineMedium,
-            color = Color(0xFFD2D2D2),
+            color = MaterialTheme.colorScheme.onBackground,
         )
 
         FlowRow(
@@ -142,6 +133,17 @@ fun GlyphsScreen(
                         .fillMaxWidth(),
                 )
             }
+        }
+
+        if (isRunning) {
+            val vizState by viewModel.visualizerState.collectAsStateWithLifecycle()
+            GlyphPreview(
+                vizState = vizState,
+                device = selectedDevice,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(400.dp)
+            )
         }
 
         Spacer(modifier = Modifier.height(28.dp))
@@ -211,7 +213,7 @@ fun GlyphPreview(
         modifier = modifier
             .padding(horizontal = 4.dp)
             .clip(RoundedCornerShape(40.dp))
-            .background(Color(0xFF0F0F0F))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
             .padding(24.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -349,14 +351,15 @@ fun GammaPreviewCard(gammaValue: Float) {
 
     val curvePath = remember { Path() }
 
+    val gridColor = MaterialTheme.colorScheme.outline
+    val accent    = MaterialTheme.colorScheme.primary
+
     Card(
         shape    = RoundedCornerShape(28.dp),
-        colors   = CardDefaults.cardColors(containerColor = Color(0xFF242222)),
+        colors   = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         modifier = Modifier.size(130.dp, 130.dp),
     ) {
         Canvas(modifier = Modifier.fillMaxSize().padding(18.dp)) {
-            val gridColor = Color(0xFF4C494C)
-            val accent    = Color(0xFFE6E0EB)
             val pad       = 8f
             val right  = size.width - pad
             val bottom = size.height - pad

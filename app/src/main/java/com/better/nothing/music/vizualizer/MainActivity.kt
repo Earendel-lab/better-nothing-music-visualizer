@@ -77,6 +77,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -207,6 +208,29 @@ internal class MainViewModel(application: Application) : AndroidViewModel(applic
     private val _hapticsTabEnabled = MutableStateFlow(true)
     val hapticsTabEnabled = _hapticsTabEnabled.asStateFlow()
 
+    // ── Theme & Font ─────────────────────────────────────────────────────────
+    private val _selectedTheme = MutableStateFlow("OLED Black")
+    val selectedTheme = _selectedTheme.asStateFlow()
+
+    private val _selectedFont = MutableStateFlow("NDot")
+    val selectedFont = _selectedFont.asStateFlow()
+
+    fun setSelectedTheme(theme: String) {
+        _selectedTheme.value = theme
+        viewModelScope.launch(Dispatchers.IO) {
+            ctx.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
+                .edit().putString("selected_theme", theme).apply()
+        }
+    }
+
+    fun setSelectedFont(font: String) {
+        _selectedFont.value = font
+        viewModelScope.launch(Dispatchers.IO) {
+            ctx.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
+                .edit().putString("selected_font", font).apply()
+        }
+    }
+
     // ── Visualizer State (Live Preview) ─────────────────────────────────────
     private val _visualizerState = MutableStateFlow(floatArrayOf())
     val visualizerState = _visualizerState.asStateFlow()
@@ -323,6 +347,10 @@ internal class MainViewModel(application: Application) : AndroidViewModel(applic
                 _hapticsTabEnabled.value = prefs.getBoolean("haptics_tab_enabled", true)
 
                 _gainValue.value = prefs.getFloat("audio_gain", 1.0f)
+
+                val theme = prefs.getString("selected_theme", "OLED Black") ?: "OLED Black"
+                _selectedTheme.value = if (theme == "Normal") "OLED Black" else theme
+                _selectedFont.value = prefs.getString("selected_font", "NDot") ?: "NDot"
 
                 _hapticMotorEnabled.value = prefs.getBoolean("haptic_motor_enabled", false)
                 _hapticImpactEnabled.value = prefs.getBoolean("haptic_impact_enabled", false)
@@ -503,7 +531,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         setContent {
-            BetterVizTheme {
+            val selectedTheme by viewModel.selectedTheme.collectAsStateWithLifecycle()
+            val selectedFont by viewModel.selectedFont.collectAsStateWithLifecycle()
+
+            BetterVizTheme(themeName = selectedTheme, fontName = selectedFont) {
                 // Collect each StateFlow independently. Compose only recomposes the
                 // subtree(s) that actually read a value when it changes — collecting
                 // them as separate `by` delegates achieves this granularity.
@@ -525,7 +556,6 @@ class MainActivity : ComponentActivity() {
                 val hapticMultiplier by viewModel.hapticMultiplier.collectAsStateWithLifecycle()
                 val hapticGamma by viewModel.hapticGamma.collectAsStateWithLifecycle()
 
-                val vizState by viewModel.visualizerState.collectAsStateWithLifecycle()
                 val selectedDevice by viewModel.selectedDevice.collectAsStateWithLifecycle()
 
                 BetterVizApp(
@@ -557,7 +587,6 @@ class MainActivity : ComponentActivity() {
                     onHapticMultiplierChanged = ::onHapticMultiplierChanged,
                     hapticGamma = hapticGamma,
                     onHapticGammaChanged = ::onHapticGammaChanged,
-                    vizState = vizState,
                     selectedDevice = selectedDevice,
                 )
             }
@@ -844,7 +873,6 @@ private fun BetterVizApp(
     onHapticMultiplierChanged: (Float) -> Unit,
     hapticGamma: Float,
     onHapticGammaChanged: (Float) -> Unit,
-    vizState: FloatArray,
     selectedDevice: Int,
 ) {
     val autoDeviceEnabled by viewModel.autoDeviceEnabled.collectAsStateWithLifecycle()
@@ -902,9 +930,9 @@ private fun BetterVizApp(
     Scaffold(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(MaterialTheme.colorScheme.background)
             .navigationBarsPadding(),
-        containerColor = Color.Black,
+        containerColor = MaterialTheme.colorScheme.background,
         floatingActionButton = {
             StartStopButton(running = isRunning, onClick = onToggleVisualizer)
         },
@@ -958,7 +986,6 @@ private fun BetterVizApp(
                             connectedDeviceName = connectedDeviceName,
                             gainValue = gainValue,
                             onGainChanged = onGainChanged,
-                            vizState = vizState,
                             selectedDevice = selectedDevice,
                         )
                         Tab.Glyphs -> GlyphsScreen(
@@ -968,8 +995,8 @@ private fun BetterVizApp(
                             selectedPreset = selectedPreset,
                             onPresetSelected = onPresetSelected,
                             isRunning = isRunning,
-                            vizState = vizState,
                             selectedDevice = selectedDevice,
+                            viewModel = viewModel,
                         )
                         Tab.Haptics -> HapticsScreen(
                             hapticMotorEnabled = hapticMotorEnabled,
@@ -984,7 +1011,7 @@ private fun BetterVizApp(
                             hapticGamma = hapticGamma,
                             onHapticGammaChanged = onHapticGammaChanged,
                         )
-                        Tab.Settings -> SettingsScreen()
+                        Tab.Settings -> SettingsScreen(viewModel)
                         Tab.About -> AboutScreen()
                     }
                 }

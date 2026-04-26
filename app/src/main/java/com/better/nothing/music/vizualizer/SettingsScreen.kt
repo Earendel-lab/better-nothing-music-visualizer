@@ -49,23 +49,17 @@ import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Vibration
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+
 @Composable
-fun SettingsScreen() {
-    val context = LocalContext.current
-    val prefs = remember(context) {
-        context.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
-    }
+internal fun SettingsScreen(viewModel: MainViewModel) {
     val scrollState = rememberScrollState()
 
     var themeExpanded by remember { mutableStateOf(false) }
-    var selectedTheme by remember {
-        mutableStateOf(prefs.getString("selected_theme", "Normal") ?: "Normal")
-    }
+    val selectedTheme by viewModel.selectedTheme.collectAsStateWithLifecycle()
 
     var fontExpanded by remember { mutableStateOf(false) }
-    var selectedFont by remember {
-        mutableStateOf(prefs.getString("selected_font", "NDot") ?: "NDot")
-    }
+    val selectedFont by viewModel.selectedFont.collectAsStateWithLifecycle()
 
     Column(
         modifier = Modifier
@@ -83,10 +77,14 @@ fun SettingsScreen() {
             expanded = themeExpanded,
             onExpandedChange = { themeExpanded = !themeExpanded },
             onDismiss = { themeExpanded = false },
-            options = listOf(stringResource(R.string.theme_normal), stringResource(R.string.theme_nothing_red)),
+            options = listOf(
+                "OLED Black",
+                "Liquorice Black",
+                "Nothing Light",
+                "Nothing Red"
+            ),
             onSelect = { theme ->
-                prefs.edit().putString("selected_theme", theme).apply()
-                selectedTheme = theme
+                viewModel.setSelectedTheme(theme)
                 themeExpanded = false
             },
             helperText = stringResource(R.string.theme_help_text)
@@ -98,10 +96,9 @@ fun SettingsScreen() {
             expanded = fontExpanded,
             onExpandedChange = { fontExpanded = !fontExpanded },
             onDismiss = { fontExpanded = false },
-            options = listOf(stringResource(R.string.font_ndot), stringResource(R.string.font_ntype)),
+            options = listOf("NDot", "NType"),
             onSelect = { font ->
-                prefs.edit().putString("selected_font", font).apply()
-                selectedFont = font
+                viewModel.setSelectedFont(font)
                 fontExpanded = false
             },
             helperText = stringResource(R.string.typography_help_text)

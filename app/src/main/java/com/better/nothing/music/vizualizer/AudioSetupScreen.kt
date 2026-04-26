@@ -54,7 +54,6 @@ fun AudioScreen(
     connectedDeviceName: String? = null,
     gainValue: Float,
     onGainChanged: (Float) -> Unit,
-    vizState: FloatArray,
     selectedDevice: Int,
 ) {
     val context = LocalContext.current
@@ -164,7 +163,7 @@ fun AutoDeviceCard(
 ) {
     Card(
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1C1B1B)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -177,14 +176,14 @@ fun AutoDeviceCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = stringResource(R.string.auto_memorize_device),
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     style = MaterialTheme.typography.titleSmall
                 )
                 Text(
                     text = if (enabled)
                         stringResource(R.string.saving_latency_for, deviceName ?: stringResource(R.string.internal_speaker))
                     else stringResource(R.string.manual_mode_global_latency),
-                    color = Color.Gray,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     style = MaterialTheme.typography.bodySmall
                 )
             }
@@ -192,7 +191,7 @@ fun AutoDeviceCard(
                 checked = enabled,
                 onCheckedChange = onToggle,
                 colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color(0xFF000000),
+                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                     checkedTrackColor = MaterialTheme.colorScheme.primary
                 )
             )
@@ -257,7 +256,7 @@ fun LatencyCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp)
-                    .background(Color(0xFF1C1B1B), RoundedCornerShape(24.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(24.dp))
                     .padding(4.dp)
             ) {
                 val spacing = 4.dp
@@ -280,7 +279,7 @@ fun LatencyCard(
                             .fillMaxHeight()
                             .offset(x = animatedX)
                             .clip(RoundedCornerShape(20.dp))
-                            .background(if (isSelected) MaterialTheme.colorScheme.primary else Color(0xFF2B2929))
+                            .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
                             .clickable {
                                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                 draggingIndex = index
@@ -290,7 +289,7 @@ fun LatencyCard(
                     ) {
                         Text(
                             text = "${preset}ms",
-                            color = if (isSelected) Color.Black else Color(0xFFE6E1E3),
+                            color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
                             style = MaterialTheme.typography.labelSmall,
                         )
                     }
@@ -362,7 +361,7 @@ fun RowScope.FineTuneButton(
     )
 
     val containerColor by animateColorAsState(
-        targetValue = if (isAnimating) MaterialTheme.colorScheme.primary else Color(0xFF2B2929),
+        targetValue = if (isAnimating) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
         animationSpec = spring(stiffness = Spring.StiffnessMedium),
         label = "color_fade"
     )
@@ -380,7 +379,7 @@ fun RowScope.FineTuneButton(
             Text(
                 text = if (amount > 0) "+$amount" else "$amount",
                 style = MaterialTheme.typography.labelMedium,
-                color = if (isAnimating)  Color(0xFF000000) else MaterialTheme.colorScheme.primary,
+                color = if (isAnimating)  MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
                 fontWeight = if (isAnimating) FontWeight.ExtraBold else FontWeight.Medium
             )
         }

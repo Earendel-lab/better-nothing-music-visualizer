@@ -23,7 +23,9 @@
     <!-- Settings Screen -->
     <string name="settings_title">Settings</string>
     <string name="app_theme">App Theme</string>
-    <string name="theme_normal">Normal</string>
+    <string name="theme_normal">OLED Black</string>
+    <string name="theme_liquorice">Liquorice Black</string>
+    <string name="theme_light">Nothing Light</string>
     <string name="theme_nothing_red">Nothing Red</string>
     <string name="theme_help_text">Changes apply after app restart.</string>
     <string name="typography">Typography</string>

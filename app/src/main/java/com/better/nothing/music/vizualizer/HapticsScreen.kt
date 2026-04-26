@@ -82,7 +82,7 @@ fun HapticsScreen(
                 Text(
                     text = "Audio-Reactive Haptics",
                     style = MaterialTheme.typography.titleMedium,
-                    color = Color(0xFFE6E1E3)
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Switch(
                     checked = hapticMotorEnabled,
@@ -109,7 +109,7 @@ fun HapticsScreen(
                         Text(
                             text = "Impact Mode",
                             style = MaterialTheme.typography.titleMedium,
-                            color = Color(0xFFE6E1E3)
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
                             text = "Sharp kicks on bass drops instead of constant vibration.",
@@ -137,7 +137,7 @@ fun HapticsScreen(
                     Text(
                         text = "Frequency: ${hapticFreqMin.toInt()} - ${hapticFreqMax.toInt()} Hz",
                         style = MaterialTheme.typography.titleMedium,
-                        color = Color(0xFFE6E1E3)
+                        color = MaterialTheme.colorScheme.onSurface
                     )
 
                     val currentRange = invLerpLog(hapticFreqMin, 20f, 1000f)..invLerpLog(hapticFreqMax, 20f, 1000f)
@@ -176,7 +176,7 @@ fun HapticsScreen(
                     Text(
                         text = "Amplitude: ${"%.2f".format(hapticMultiplier)}x",
                         style = MaterialTheme.typography.titleMedium,
-                        color = Color(0xFFE6E1E3)
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     ExpressiveSlider(
                         value = hapticMultiplier,
@@ -200,7 +200,7 @@ fun HapticsScreen(
                     Text(
                         text = "Gamma (Response): ${"%.2f".format(hapticGamma)}",
                         style = MaterialTheme.typography.titleMedium,
-                        color = Color(0xFFE6E1E3)
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     ExpressiveSlider(
                         value = hapticGamma,

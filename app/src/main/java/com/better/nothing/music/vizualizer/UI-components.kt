@@ -87,7 +87,7 @@ fun ScreenTitle(text: String) {
     Text(
         text  = text,
         style = MaterialTheme.typography.displayLarge,
-        color = Color.White,
+        color = MaterialTheme.colorScheme.onBackground,
     )
 }
 
@@ -109,7 +109,7 @@ fun BodyText(
                 fontWeight = FontWeight.Normal,
             )
         },
-        color    = Color(0xFFD0D0D0),
+        color    = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
         modifier = modifier,
     )
 }
@@ -488,47 +488,99 @@ data class AppSpacing(
 val LocalAppSpacing = staticCompositionLocalOf { AppSpacing() }
 
 @Composable
-fun BetterVizTheme(content: @Composable () -> Unit) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val prefs = context.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
-    val themeName = prefs.getString("selected_theme", "Normal") ?: "Normal"
-    val isNothingRed = themeName == "Nothing Red"
-    val fontName = prefs.getString("selected_font", "NDot") ?: "NDot"
+fun BetterVizTheme(
+    themeName: String = "OLED Black",
+    fontName: String = "NDot",
+    content: @Composable () -> Unit
+) {
     val useNType = fontName == "NType"
 
-    val colorScheme = if (isNothingRed) {
-        androidx.compose.material3.darkColorScheme(
-            background = Color.Black,
-            surface = Color(0xFF0D0D0D),
-            primary = Color(0xFFEE0000),    // Authentic Nothing Red
-            secondary = Color(0xFFEE0000),
-            error = Color(0xFFEE0000),
-            onBackground = Color.White,
-            onSurface = Color.White,
-            onPrimary = Color.White,
-            onSecondary = Color.White,
-            onError = Color.White,
-            surfaceVariant = Color(0xFF1A1A1A),
-            onSurfaceVariant = Color(0xFFB3B3B3),
-            outline = Color(0xFF333333)
-        )
-    } else {
-        androidx.compose.material3.darkColorScheme(
-            background = Color.Black,
-            surface = Color(0xFF232323),
-            primary = Color(0xFFD8D3DA),
-            secondary = Color(0xFFA0FFA3),
-            error = Color(0xFFC83B3B),
-            onBackground = Color.White,
-            onSurface = Color.White,
-            onPrimary = Color(0xFF1C1A1D),
-            onSecondary = Color(0xFF1C5A21),
-            onError = Color.White,
-            surfaceVariant = Color(0xFF242424),
-            onSurfaceVariant = Color(0xFF676767),
-            outline = Color(0xFF2C2C2C)
-        )
+    val targetColorScheme = when (themeName) {
+        "Nothing Red" -> {
+            androidx.compose.material3.darkColorScheme(
+                background = Color.Black,
+                surface = Color(0xFF0D0D0D),
+                primary = Color(0xFFEE0000),    // Authentic Nothing Red
+                secondary = Color(0xFFEE0000),
+                error = Color(0xFFEE0000),
+                onBackground = Color.White,
+                onSurface = Color.White,
+                onPrimary = Color.White,
+                onSecondary = Color.White,
+                onError = Color.White,
+                surfaceVariant = Color(0xFF1A1A1A),
+                onSurfaceVariant = Color(0xFFB3B3B3),
+                outline = Color(0xFF333333)
+            )
+        }
+        "Liquorice Black" -> {
+            androidx.compose.material3.darkColorScheme(
+                background = Color(0xFF0F0F0F), // Authentic Liquorice Black
+                surface = Color(0xFF1A1A1A),
+                primary = Color(0xFFD8D3DA),
+                secondary = Color(0xFFA0FFA3),
+                error = Color(0xFFC83B3B),
+                onBackground = Color.White,
+                onSurface = Color.White,
+                onPrimary = Color(0xFF1C1A1D),
+                onSecondary = Color(0xFF1C5A21),
+                onError = Color.White,
+                surfaceVariant = Color(0xFF242424),
+                onSurfaceVariant = Color(0xFF676767),
+                outline = Color(0xFF2C2C2C)
+            )
+        }
+        "Nothing Light" -> {
+            androidx.compose.material3.lightColorScheme(
+                background = Color.White,
+                surface = Color(0xFFF5F5F5),
+                primary = Color(0xFF000000),
+                secondary = Color(0xFF626262),
+                error = Color(0xFFEE0000),
+                onBackground = Color.Black,
+                onSurface = Color.Black,
+                onPrimary = Color.White,
+                onSecondary = Color.White,
+                onError = Color.White,
+                surfaceVariant = Color(0xFFE0E0E0),
+                onSurfaceVariant = Color(0xFF757575),
+                outline = Color(0xFFBDBDBD)
+            )
+        }
+        else -> { // OLED Black / Default
+            androidx.compose.material3.darkColorScheme(
+                background = Color.Black,
+                surface = Color(0xFF1A1A1A),
+                primary = Color(0xFFD8D3DA),
+                secondary = Color(0xFFA0FFA3),
+                error = Color(0xFFC83B3B),
+                onBackground = Color.White,
+                onSurface = Color.White,
+                onPrimary = Color(0xFF1C1A1D),
+                onSecondary = Color(0xFF1C5A21),
+                onError = Color.White,
+                surfaceVariant = Color(0xFF242424),
+                onSurfaceVariant = Color(0xFF676767),
+                outline = Color(0xFF2C2C2C)
+            )
+        }
     }
+
+    val colorScheme = targetColorScheme.copy(
+        primary = animateColorAsState(targetColorScheme.primary, tween(500)).value,
+        onPrimary = animateColorAsState(targetColorScheme.onPrimary, tween(500)).value,
+        secondary = animateColorAsState(targetColorScheme.secondary, tween(500)).value,
+        onSecondary = animateColorAsState(targetColorScheme.onSecondary, tween(500)).value,
+        error = animateColorAsState(targetColorScheme.error, tween(500)).value,
+        onError = animateColorAsState(targetColorScheme.onError, tween(500)).value,
+        background = animateColorAsState(targetColorScheme.background, tween(500)).value,
+        onBackground = animateColorAsState(targetColorScheme.onBackground, tween(500)).value,
+        surface = animateColorAsState(targetColorScheme.surface, tween(500)).value,
+        onSurface = animateColorAsState(targetColorScheme.onSurface, tween(500)).value,
+        surfaceVariant = animateColorAsState(targetColorScheme.surfaceVariant, tween(500)).value,
+        onSurfaceVariant = animateColorAsState(targetColorScheme.onSurfaceVariant, tween(500)).value,
+        outline = animateColorAsState(targetColorScheme.outline, tween(500)).value,
+    )
 
     val typography = Typography(
         // HEADERS
