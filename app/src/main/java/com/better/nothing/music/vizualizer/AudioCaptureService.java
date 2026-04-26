@@ -26,6 +26,9 @@ import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Process;
 import android.os.SystemClock;
+import android.os.VibrationAttributes;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 import android.service.quicksettings.TileService;
 import android.util.Log;
 
@@ -170,6 +173,16 @@ public class AudioCaptureService extends Service {
     private volatile int mPresetConfigVersion = 0;
     private volatile float mGamma = DEFAULT_GAMMA;
 
+    private volatile boolean mHapticEnabled = false;
+    private volatile float mHapticMultiplier = 1.0f;
+    private volatile float mHapticGamma = 2.0f;
+    private volatile FrequencyRange mHapticRange = new FrequencyRange(60, 250);
+    private float mHapticPeakTracker = EPSILON;
+    private float mDecayedHapticState = 0f;
+    private int mLastHapticAmplitude = -1;
+    private long mLastHapticUpdateMs = 0;
+    private Vibrator mVibrator;
+
     private float[] mCurrentLightState = new float[0];
     private float[] mZonePeaks = new float[0];
     private float[] mDecayedFrequencyState = new float[0];
@@ -218,7 +231,7 @@ public class AudioCaptureService extends Service {
     ) {
     }
 
-    private record PendingFrame(float[] uniquePeaks, VisualizerConfig config, int configVersion, long dueAtMs) {
+    private record PendingFrame(float[] uniquePeaks, float hapticPeak, VisualizerConfig config, int configVersion, long dueAtMs) {
     }
 
     public static final class PresetInfo {
@@ -248,6 +261,8 @@ public class AudioCaptureService extends Service {
         if (mAudioManager != null) {
             mAudioManager.registerAudioDeviceCallback(mAudioDeviceCallback, mWorkerHandler);
         }
+
+        mVibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
 
         mSelectedDevice = DeviceProfile.detectDevice();
         mLatencyCompensationMs = loadLatencyCompensationMs(this, mSelectedDevice);
@@ -448,6 +463,22 @@ public class AudioCaptureService extends Service {
 
     public void setGamma(float gamma) {
         mGamma = gamma;
+    }
+
+    public void setHapticEnabled(boolean enabled) {
+        mHapticEnabled = enabled;
+    }
+
+    public void setHapticFreqRange(float minHz, float maxHz) {
+        mHapticRange = new FrequencyRange(minHz, maxHz);
+    }
+
+    public void setHapticMultiplier(float multiplier) {
+        mHapticMultiplier = multiplier;
+    }
+
+    public void setHapticGamma(float gamma) {
+        mHapticGamma = gamma;
     }
 
     public void startCapture(int resultCode, Intent data) {
@@ -655,8 +686,20 @@ public class AudioCaptureService extends Service {
             }
 
             float[] uniquePeaks = computeUniquePeaks(config, magnitude);
+
+            float hapticPeak = 0f;
+            FrequencyRange hRange = mHapticRange;
+            if (mHapticEnabled && hRange != null) {
+                for (int bin = hRange.binLo; bin <= hRange.binHi; bin++) {
+                    if (magnitude[bin] > hapticPeak) {
+                        hapticPeak = magnitude[bin];
+                    }
+                }
+            }
+
             pendingFrames.addLast(new PendingFrame(
                     uniquePeaks,
+                    hapticPeak,
                     config,
                     presetVersion,
                     SystemClock.elapsedRealtime() + mLatencyCompensationMs
@@ -688,11 +731,11 @@ public class AudioCaptureService extends Service {
                 return;
             }
             pendingFrames.removeFirst();
-            processFrame(pendingFrame.uniquePeaks, pendingFrame.config, pendingFrame.configVersion);
+            processFrame(pendingFrame.uniquePeaks, pendingFrame.hapticPeak, pendingFrame.config, pendingFrame.configVersion);
         }
     }
 
-    private void processFrame(float[] uniquePeaks, VisualizerConfig config, int configVersion) {
+    private void processFrame(float[] uniquePeaks, float hapticPeak, VisualizerConfig config, int configVersion) {
         if (!mSessionOpen || mGM == null || config == null || configVersion != mPresetConfigVersion) {
             return;
         }
@@ -700,6 +743,10 @@ public class AudioCaptureService extends Service {
         long now = SystemClock.elapsedRealtime();
         if (now - mLastSendMs < MIN_SEND_INTERVAL_MS) {
             return;
+        }
+
+        if (mHapticEnabled && hapticPeak > 0) {
+            performHapticFeedback(hapticPeak);
         }
 
         ensureStateArrays(config.zones.length, config.uniqueRanges.length);
@@ -736,6 +783,52 @@ public class AudioCaptureService extends Service {
             return 0f;
         }
         return (float) Math.pow(normalizedValue, mGamma);
+    }
+
+    private void performHapticFeedback(float rawPeak) {
+        if (mVibrator == null || !mVibrator.hasVibrator()) return;
+
+        float current = rawPeak * SPECTRUM_GAIN * mHapticMultiplier;
+
+        // Smooth the input slightly to remove high-frequency noise/jitter
+        mDecayedHapticState = (0.8f * mDecayedHapticState) + (0.2f * current);
+
+        // Track peaks for auto-normalization
+        mHapticPeakTracker = Math.max(mDecayedHapticState, mHapticPeakTracker * 0.998f);
+        if (mHapticPeakTracker < EPSILON) return;
+
+        float normalized = Math.min(1f, mDecayedHapticState / mHapticPeakTracker);
+        float shaped = (float) Math.pow(normalized, mHapticGamma);
+
+        int amplitude = Math.round(shaped * 255f);
+        amplitude = Math.max(0, Math.min(255, amplitude));
+
+        // Deadzone to prevent the motor from "buzzing" at very low levels
+        if (amplitude < 15) amplitude = 0;
+
+        long now = SystemClock.elapsedRealtime();
+
+        // LOGIC: To prevent "tapping", we avoid restarting the motor unless necessary.
+        // We only call vibrate if:
+        // 1. The amplitude has changed significantly (avoiding micro-jitter restarts)
+        // 2. The previous vibration is about to expire (keep-alive)
+        // 3. We are transitioning from/to silence.
+
+        boolean significantChange = Math.abs(amplitude - mLastHapticAmplitude) > 35;
+        boolean transition = (amplitude == 0) != (mLastHapticAmplitude == 0);
+        boolean timeout = (now - mLastHapticUpdateMs) > 100;
+
+        if (significantChange || transition || (amplitude > 0 && timeout)) {
+            if (amplitude > 0) {
+                // Duration of 150ms is long enough to feel continuous if we update regularly.
+                // Modern Android restarts the effect on every call, which is why we limit calls.
+                mVibrator.vibrate(VibrationEffect.createOneShot(150, amplitude));
+                mLastHapticUpdateMs = now;
+            } else {
+                mVibrator.cancel();
+            }
+            mLastHapticAmplitude = amplitude;
+        }
     }
 
     private float[] computeNextLightState(float[] uniquePeaks, VisualizerConfig config) {
@@ -792,6 +885,8 @@ public class AudioCaptureService extends Service {
     }
 
     private void resetVisualizerState() {
+        mDecayedHapticState = 0f;
+        mLastHapticAmplitude = -1;
         if (mVisualizerConfig == null) {
             mCurrentLightState = new float[0];
             mZonePeaks = new float[0];

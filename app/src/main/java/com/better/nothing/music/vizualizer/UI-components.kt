@@ -67,6 +67,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.platform.LocalContext
@@ -313,6 +314,7 @@ fun ExpressiveSlider(
         label = "expressive_bounce"
     )
 
+    val view = LocalView.current
     Slider(
         value = value,
         onValueChange = { newValue ->
@@ -320,7 +322,24 @@ fun ExpressiveSlider(
         },
         valueRange = valueRange,
         interactionSource = interactionSource,
-        modifier = modifier.height(56.dp), // Extra height for the "bloom"
+        modifier = modifier
+            .height(56.dp)
+            .pointerInput(isActive) {
+                if (isActive) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Main)
+                            event.changes.forEach { if (it.pressed) it.consume() }
+                        }
+                    }
+                }
+            }
+            .pointerInteropFilter { motionEvent ->
+                if (motionEvent.action == MotionEvent.ACTION_DOWN) {
+                    view.parent?.requestDisallowInterceptTouchEvent(true)
+                }
+                false
+            },
         thumb = {
             // THUMB: Gets THINNER as animationFactor increases
             // Width: 4dp -> 2dp | Height: 44dp -> 48dp
@@ -396,17 +415,21 @@ fun ExpressiveRangeSlider(
         endInteractionSource = endInteractionSource,
         modifier = modifier
             .height(64.dp)
-            .pointerInteropFilter { motionEvent ->
-                when (motionEvent.action) {
-                    MotionEvent.ACTION_DOWN -> {
-                        // Use the view to tell the parent to stop intercepting
-                        view.parent?.requestDisallowInterceptTouchEvent(true)
-                    }
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                        view.parent?.requestDisallowInterceptTouchEvent(false)
+            .pointerInput(isAnyActive) {
+                if (isAnyActive) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Main)
+                            event.changes.forEach { if (it.pressed) it.consume() }
+                        }
                     }
                 }
-                false // Crucial: return false so the RangeSlider still processes the touch
+            }
+            .pointerInteropFilter { motionEvent ->
+                if (motionEvent.action == MotionEvent.ACTION_DOWN) {
+                    view.parent?.requestDisallowInterceptTouchEvent(true)
+                }
+                false
             },
         startThumb = { ExpressiveThumb(factor = startThumbFactor) },
         endThumb = { ExpressiveThumb(factor = endThumbFactor) },

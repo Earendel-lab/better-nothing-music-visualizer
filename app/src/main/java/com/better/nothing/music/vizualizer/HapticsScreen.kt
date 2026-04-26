@@ -1,7 +1,5 @@
 package com.better.nothing.music.vizualizer
 
-import android.app.Activity
-import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,17 +17,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.res.stringResource
 import kotlin.math.*
 
 // Linear position (0..1) to Logarithmic Frequency (20..2000)
@@ -47,39 +40,29 @@ fun invLerpLog(freq: Float, min: Float, max: Float): Float {
 }
 
 @Composable
-fun HapticsScreen() {
-    val context = LocalContext.current
-    val prefs = remember(context) {
-        context.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
-    }
+fun HapticsScreen(
+    hapticMotorEnabled: Boolean,
+    onHapticMotorEnabledChanged: (Boolean) -> Unit,
+    hapticFreqMin: Float,
+    hapticFreqMax: Float,
+    onHapticFreqRangeChanged: (Float, Float) -> Unit,
+    hapticMultiplier: Float,
+    onHapticMultiplierChanged: (Float) -> Unit,
+    hapticGamma: Float,
+    onHapticGammaChanged: (Float) -> Unit,
+) {
     val scrollState = rememberScrollState()
-
-    var hapticMotorEnabled by remember {
-        mutableStateOf(prefs.getBoolean("haptic_motor_enabled", false))
-    }
-    var hapticFreqMin by remember {
-        mutableStateOf(prefs.getInt("haptic_freq_min", 60).toFloat())
-    }
-    var hapticFreqMax by remember {
-        mutableStateOf(prefs.getInt("haptic_freq_max", 250).toFloat())
-    }
-    var hapticMultiplier by remember {
-        mutableStateOf(prefs.getFloat("haptic_multiplier", 1.0f))
-    }
-    var hapticGamma by remember {
-        mutableStateOf(prefs.getFloat("haptic_gamma", 2.0f))
-    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp) // Standardized padding
+            .padding(horizontal = 16.dp)
             .verticalScroll(scrollState),
         verticalArrangement = Arrangement.spacedBy(22.dp),
     ) {
         Spacer(modifier = Modifier.height(20.dp))
-        ScreenTitle(text = stringResource(R.string.haptics_title))
-        BodyText(text = stringResource(R.string.haptics_description))
+        ScreenTitle(text = "Haptics")
+        BodyText(text = "Audio-reactive vibration settings.")
 
         // Haptic Motor Toggle
         Card(
@@ -90,7 +73,7 @@ fun HapticsScreen() {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(20.dp), // Increased padding for better touch target
+                    .padding(20.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -101,10 +84,7 @@ fun HapticsScreen() {
                 )
                 Switch(
                     checked = hapticMotorEnabled,
-                    onCheckedChange = { enabled ->
-                        hapticMotorEnabled = enabled
-                        prefs.edit().putBoolean("haptic_motor_enabled", enabled).apply()
-                    }
+                    onCheckedChange = onHapticMotorEnabledChanged
                 )
             }
         }
@@ -117,7 +97,7 @@ fun HapticsScreen() {
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Column(
-                    modifier = Modifier.padding(20.dp), // FIXED: Added missing padding
+                    modifier = Modifier.padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
@@ -135,12 +115,7 @@ fun HapticsScreen() {
                             val newMax = lerpLog(newRange.endInclusive, 20f, 1000f)
 
                             if (newMax - newMin >= 10f) {
-                                hapticFreqMin = newMin
-                                hapticFreqMax = newMax
-                                prefs.edit()
-                                    .putInt("haptic_freq_min", newMin.toInt())
-                                    .putInt("haptic_freq_max", newMax.toInt())
-                                    .apply()
+                                onHapticFreqRangeChanged(newMin, newMax)
                             }
                         },
                         valueRange = 0f..1f,
@@ -171,10 +146,7 @@ fun HapticsScreen() {
                     )
                     ExpressiveSlider(
                         value = hapticMultiplier,
-                        onValueChange = { newVal ->
-                            hapticMultiplier = newVal
-                            prefs.edit().putFloat("haptic_multiplier", hapticMultiplier).apply()
-                        },
+                        onValueChange = onHapticMultiplierChanged,
                         valueRange = 0.5f..1.5f,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -198,10 +170,7 @@ fun HapticsScreen() {
                     )
                     ExpressiveSlider(
                         value = hapticGamma,
-                        onValueChange = { newVal ->
-                            hapticGamma = newVal
-                            prefs.edit().putFloat("haptic_gamma", hapticGamma).apply()
-                        },
+                        onValueChange = onHapticGammaChanged,
                         valueRange = 1f..4.0f,
                         modifier = Modifier.fillMaxWidth()
                     )

@@ -195,6 +195,58 @@ internal class MainViewModel(application: Application) : AndroidViewModel(applic
     private val _hapticsTabEnabled = MutableStateFlow(true)
     val hapticsTabEnabled = _hapticsTabEnabled.asStateFlow()
 
+    // ── Haptic Settings ──────────────────────────────────────────────────────
+    private val _hapticMotorEnabled = MutableStateFlow(false)
+    val hapticMotorEnabled = _hapticMotorEnabled.asStateFlow()
+
+    private val _hapticFreqMin = MutableStateFlow(60f)
+    val hapticFreqMin = _hapticFreqMin.asStateFlow()
+
+    private val _hapticFreqMax = MutableStateFlow(250f)
+    val hapticFreqMax = _hapticFreqMax.asStateFlow()
+
+    private val _hapticMultiplier = MutableStateFlow(1.0f)
+    val hapticMultiplier = _hapticMultiplier.asStateFlow()
+
+    private val _hapticGamma = MutableStateFlow(2.0f)
+    val hapticGamma = _hapticGamma.asStateFlow()
+
+    fun setHapticMotorEnabled(enabled: Boolean) {
+        _hapticMotorEnabled.value = enabled
+        viewModelScope.launch(Dispatchers.IO) {
+            ctx.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
+                .edit().putBoolean("haptic_motor_enabled", enabled).apply()
+        }
+    }
+
+    fun setHapticFreqRange(min: Float, max: Float) {
+        _hapticFreqMin.value = min
+        _hapticFreqMax.value = max
+        viewModelScope.launch(Dispatchers.IO) {
+            ctx.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
+                .edit()
+                .putInt("haptic_freq_min", min.toInt())
+                .putInt("haptic_freq_max", max.toInt())
+                .apply()
+        }
+    }
+
+    fun setHapticMultiplier(multiplier: Float) {
+        _hapticMultiplier.value = multiplier
+        viewModelScope.launch(Dispatchers.IO) {
+            ctx.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
+                .edit().putFloat("haptic_multiplier", multiplier).apply()
+        }
+    }
+
+    fun setHapticGamma(gamma: Float) {
+        _hapticGamma.value = gamma
+        viewModelScope.launch(Dispatchers.IO) {
+            ctx.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
+                .edit().putFloat("haptic_gamma", gamma).apply()
+        }
+    }
+
     fun setAutoDeviceEnabled(enabled: Boolean): Int {
         _autoDeviceEnabled.value = enabled
         viewModelScope.launch(Dispatchers.IO) {
@@ -238,6 +290,12 @@ internal class MainViewModel(application: Application) : AndroidViewModel(applic
                 _autoDeviceEnabled.value = prefs.getBoolean("auto_device_enabled", true)
                 _glyphTabEnabled.value = prefs.getBoolean("glyph_tab_enabled", true)
                 _hapticsTabEnabled.value = prefs.getBoolean("haptics_tab_enabled", true)
+
+                _hapticMotorEnabled.value = prefs.getBoolean("haptic_motor_enabled", false)
+                _hapticFreqMin.value = prefs.getInt("haptic_freq_min", 60).toFloat()
+                _hapticFreqMax.value = prefs.getInt("haptic_freq_max", 250).toFloat()
+                _hapticMultiplier.value = prefs.getFloat("haptic_multiplier", 1.0f)
+                _hapticGamma.value = prefs.getFloat("haptic_gamma", 2.0f)
             }
 
             startRunningStatePoller()
@@ -417,6 +475,12 @@ class MainActivity : ComponentActivity() {
                 val glyphTabEnabled by viewModel.glyphTabEnabled.collectAsStateWithLifecycle()
                 val hapticsTabEnabled by viewModel.hapticsTabEnabled.collectAsStateWithLifecycle()
 
+                val hapticMotorEnabled by viewModel.hapticMotorEnabled.collectAsStateWithLifecycle()
+                val hapticFreqMin by viewModel.hapticFreqMin.collectAsStateWithLifecycle()
+                val hapticFreqMax by viewModel.hapticFreqMax.collectAsStateWithLifecycle()
+                val hapticMultiplier by viewModel.hapticMultiplier.collectAsStateWithLifecycle()
+                val hapticGamma by viewModel.hapticGamma.collectAsStateWithLifecycle()
+
                 BetterVizApp(
                     tab = tab,
                     onTabSelected = viewModel::selectTab,
@@ -433,6 +497,15 @@ class MainActivity : ComponentActivity() {
                     onToggleVisualizer = ::toggleVisualizer,
                     onAutoDeviceToggle = ::onAutoDeviceToggle,
                     viewModel = viewModel,
+                    hapticMotorEnabled = hapticMotorEnabled,
+                    onHapticMotorEnabledChanged = ::onHapticMotorEnabledChanged,
+                    hapticFreqMin = hapticFreqMin,
+                    hapticFreqMax = hapticFreqMax,
+                    onHapticFreqRangeChanged = ::onHapticFreqRangeChanged,
+                    hapticMultiplier = hapticMultiplier,
+                    onHapticMultiplierChanged = ::onHapticMultiplierChanged,
+                    hapticGamma = hapticGamma,
+                    onHapticGammaChanged = ::onHapticGammaChanged,
                 )
             }
         }
@@ -483,6 +556,26 @@ class MainActivity : ComponentActivity() {
         viewModel.setGammaValue(value)
         viewModel.persistGamma(value)            // Dispatchers.IO — never blocks main
         service?.setGamma(value)
+    }
+
+    private fun onHapticMotorEnabledChanged(enabled: Boolean) {
+        viewModel.setHapticMotorEnabled(enabled)
+        service?.setHapticEnabled(enabled)
+    }
+
+    private fun onHapticFreqRangeChanged(min: Float, max: Float) {
+        viewModel.setHapticFreqRange(min, max)
+        service?.setHapticFreqRange(min, max)
+    }
+
+    private fun onHapticMultiplierChanged(multiplier: Float) {
+        viewModel.setHapticMultiplier(multiplier)
+        service?.setHapticMultiplier(multiplier)
+    }
+
+    private fun onHapticGammaChanged(gamma: Float) {
+        viewModel.setHapticGamma(gamma)
+        service?.setHapticGamma(gamma)
     }
 
     private fun onPresetSelected(key: String) {
@@ -548,6 +641,12 @@ class MainActivity : ComponentActivity() {
         service?.setDevice(viewModel.selectedDevice.value)
         service?.setLatencyCompensationMs(viewModel.latencyMs.value)
         service?.setGamma(viewModel.gammaValue.value)
+
+        service?.setHapticEnabled(viewModel.hapticMotorEnabled.value)
+        service?.setHapticFreqRange(viewModel.hapticFreqMin.value, viewModel.hapticFreqMax.value)
+        service?.setHapticMultiplier(viewModel.hapticMultiplier.value)
+        service?.setHapticGamma(viewModel.hapticGamma.value)
+
         val preset = viewModel.currentPreset()
         if (preset.isNotBlank()) service?.setPreset(preset)
     }
@@ -667,7 +766,15 @@ private fun BetterVizApp(
     onPresetSelected: (String) -> Unit,
     onToggleVisualizer: () -> Unit,
     onAutoDeviceToggle: (Boolean) -> Unit,
-    // Removed unused toggle params
+    hapticMotorEnabled: Boolean,
+    onHapticMotorEnabledChanged: (Boolean) -> Unit,
+    hapticFreqMin: Float,
+    hapticFreqMax: Float,
+    onHapticFreqRangeChanged: (Float, Float) -> Unit,
+    hapticMultiplier: Float,
+    onHapticMultiplierChanged: (Float) -> Unit,
+    hapticGamma: Float,
+    onHapticGammaChanged: (Float) -> Unit,
 ) {
     val autoDeviceEnabled by viewModel.autoDeviceEnabled.collectAsStateWithLifecycle()
     val connectedDeviceName by viewModel.connectedDeviceName.collectAsStateWithLifecycle()
@@ -772,7 +879,17 @@ private fun BetterVizApp(
                             selectedPreset = selectedPreset,
                             onPresetSelected = onPresetSelected,
                         )
-                        Tab.Haptics -> HapticsScreen()
+                        Tab.Haptics -> HapticsScreen(
+                            hapticMotorEnabled = hapticMotorEnabled,
+                            onHapticMotorEnabledChanged = onHapticMotorEnabledChanged,
+                            hapticFreqMin = hapticFreqMin,
+                            hapticFreqMax = hapticFreqMax,
+                            onHapticFreqRangeChanged = onHapticFreqRangeChanged,
+                            hapticMultiplier = hapticMultiplier,
+                            onHapticMultiplierChanged = onHapticMultiplierChanged,
+                            hapticGamma = hapticGamma,
+                            onHapticGammaChanged = onHapticGammaChanged,
+                        )
                         Tab.Settings -> SettingsScreen()
                         Tab.About -> AboutScreen()
                     }
