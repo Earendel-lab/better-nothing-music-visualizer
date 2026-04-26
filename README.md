@@ -85,5 +85,7 @@ https://www.virustotal.com/gui/url/c92c1ff82b56eb60bfd1e159592d09f949f0ea2d195e0
 - [あけ なるかみ](https://github.com/Luke20YT) (Dev making a Music app with an integration with this script)
 - [Interlastic](https://github.com/Interlastic) (Discord Bot to try the script easily) (deprecated)
 
+<img alt="GitHub App Downloads" src="https://img.shields.io/github/downloads/Aleks-Levet/better-nothing-music-visualizer/total">
+
 ### <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Travel%20and%20places/Star.png" alt="Star" width="25" height="25" /> Star History
 ![Star History](https://api.star-history.com/svg?repos=Aleks-Levet/better-nothing-music-visualizer&type=Date)
