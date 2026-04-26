@@ -479,7 +479,7 @@ class MainActivity : ComponentActivity() {
                         Manifest.permission.RECORD_AUDIO
                     ) != PackageManager.PERMISSION_GRANTED
                 )
-                deliverProjectionToken(result.resultCode, data)
+                    deliverProjectionToken(result.resultCode, data)
             } else {
                 viewModel.setRunning(false)
                 Toast.makeText(this, "Screen capture permission denied", Toast.LENGTH_SHORT).show()

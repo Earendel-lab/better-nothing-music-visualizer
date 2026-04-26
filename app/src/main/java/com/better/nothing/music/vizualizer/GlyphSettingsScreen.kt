@@ -30,10 +30,6 @@ import kotlin.math.*
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.NativePaint
-import androidx.compose.ui.graphics.nativeCanvas
-import android.graphics.BlurMaskFilter
-import androidx.compose.ui.graphics.toArgb
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -159,7 +155,7 @@ fun GlyphPreview(
     modifier: Modifier = Modifier
 ) {
     val color = MaterialTheme.colorScheme.primary
-    val baseOpacity = 0.08f
+    val baseOpacity = 0.15f
 
     // --- SMOOTHING ---
     val smoothedState = remember { mutableStateOf(FloatArray(0)) }
@@ -171,7 +167,7 @@ fun GlyphPreview(
             for (i in vizState.indices) {
                 val target = vizState[i]
                 val current = smoothedState.value[i]
-                val factor = if (target > current) 0.12f else 0.03f // Even slower decay for premium feel
+                val factor = if (target > current) 0.12f else 0.04f
                 next[i] = current + (target - current) * factor
             }
             smoothedState.value = next
@@ -204,7 +200,7 @@ fun GlyphPreview(
             put("p2_24", parser.parsePathString("M90.191,364.357c-1.691,-0 -3.055,1.373 -3.055,3.058l-0,3.231c-0,1.694 1.372,3.059 3.055,3.059c1.682,-0 3.055,-1.374 3.055,-3.059l-0,-3.231c-0,-1.693 -1.373,-3.058 -3.055,-3.058Z").toPath())
             put("p2_battery", parser.parsePathString("M87.136,315.644l-0,39.873c-0,1.693 1.372,3.059 3.055,3.059c1.682,-0 3.055,-1.375 3.055,-3.059l-0,-39.873c-0,-1.097 -0.587,-2.108 -1.527,-2.653c-0.95,-0.544 -2.115,-0.544 -3.055,0c-0.949,0.545 -1.528,1.556 -1.528,2.653Z").toPath())
 
-            // P3a
+            // P3a Paths
             put("p3a_0-19", parser.parsePathString("M41.5,134.113C42.51,135.434 42.25,137.313 40.92,138.312C39.59,139.311 37.72,139.049 36.72,137.719L35.13,135.628L35.13,135.627L34.61,134.911L31.49,130.778L27.29,125.218L24.19,121.091L22.14,118.364C21.13,117.043 21.39,115.163 22.73,114.164C23.3,113.727 23.99,113.532 24.66,113.562C25.53,113.599 26.36,114.009 26.93,114.757L28.92,117.404L32.08,121.606L32.38,121.991L32.62,122.324L35.74,126.452L35.8,126.531L36.28,127.169L39.86,131.912L41.5,134.113Z").toPath())
             put("p3a_20-30", parser.parsePathString("M162.87,60.41C164.27,60.36 165.56,61.288 165.91,62.693C166.18,63.799 166.42,64.91 166.64,66.024L166.64,66.025C167.04,68.036 167.37,70.056 167.6,72.08L167.6,72.081C167.83,74.113 168.02,76.149 168.08,78.185C168.17,79.963 168.17,81.743 168.13,83.518C168.07,85.554 167.94,87.585 167.72,89.608L167.74,89.609C167.5,91.909 167.15,94.196 166.7,96.466L166.7,96.465C166.31,98.468 165.85,100.458 165.29,102.428L165.29,102.427C164.82,104.134 164.3,105.826 163.71,107.501C163.03,109.425 162.27,111.325 161.45,113.198L161.45,113.202C160.63,115.062 159.73,116.895 158.76,118.697L158.76,118.698C158.21,119.704 157.66,120.702 157.08,121.687C156.22,123.11 154.38,123.574 152.96,122.726C151.54,121.881 151.07,120.033 151.92,118.61C152.32,117.914 152.74,117.21 153.12,116.501C154.03,114.839 154.88,113.15 155.67,111.434L155.67,111.433C156.46,109.712 157.17,107.966 157.81,106.198L157.79,106.197C158.52,104.189 159.16,102.152 159.71,100.096C160.2,98.276 160.62,96.438 160.95,94.588L160.95,94.589C161.25,92.978 161.49,91.357 161.68,89.728L161.68,89.727C161.89,87.86 162.04,85.983 162.12,84.102L162.11,84.102C162.18,81.972 162.18,79.837 162.08,77.702C161.97,75.82 161.8,73.939 161.56,72.062C161.35,70.437 161.09,68.815 160.77,67.198L160.75,67.198C160.72,67.058 160.69,66.919 160.66,66.78C160.66,66.674 160.63,66.568 160.61,66.462C160.44,65.679 160.27,64.896 160.07,64.115C159.67,62.51 160.66,60.882 162.28,60.493C162.47,60.444 162.67,60.418 162.87,60.41Z").toPath())
             put("p3a_31-35", parser.parsePathString("M23.37,58.781C23.34,58.831 23.32,58.882 23.31,58.932C23.3,58.952 23.29,58.973 23.29,58.993L23.29,59C23.28,59.027 23.27,59.055 23.26,59.082C22.71,60.606 21.02,61.416 19.49,60.9C17.93,60.375 17.07,58.671 17.6,57.102L17.6,57.061C17.94,56.041 18.31,55.035 18.69,54.034L18.7,54.035C19.06,53.083 19.44,52.139 19.84,51.203C20.17,50.415 20.52,49.634 20.87,48.859L20.87,48.858C21.31,47.931 21.74,47.015 22.22,46.107C22.77,45.031 23.34,43.967 23.94,42.919L23.94,42.92C24.45,42.033 24.98,41.155 25.52,40.289L25.52,40.29C25.97,39.563 26.45,38.845 26.93,38.135L26.93,38.134C27.49,37.284 28.08,36.446 28.68,35.619L28.68,35.618C29.31,34.755 29.96,33.908 30.61,33.072C31.33,32.17 32.07,31.285 32.82,30.416L32.82,30.418C33.38,29.778 33.94,29.146 34.52,28.521C34.54,28.497 34.57,28.472 34.59,28.448C34.68,28.349 34.77,28.249 34.86,28.149C35.45,27.525 36.06,26.909 36.66,26.303L36.66,26.302C37.38,25.581 38.11,24.874 38.87,24.179L38.87,24.177C39.73,23.375 40.62,22.593 41.52,21.83L41.53,21.831C42.31,21.172 43.1,20.529 43.91,19.901C44.6,19.373 45.27,18.856 45.97,18.349C46.8,17.744 47.65,17.154 48.49,16.581L48.49,16.578C49.42,15.965 50.34,15.368 51.29,14.792C51.83,14.468 52.41,14.328 52.99,14.355C53.95,14.4 54.88,14.908 55.41,15.793C56.28,17.209 55.84,19.056 54.42,19.922C54.36,19.963 54.28,20.007 54.21,20.047L54.21,20.045C53.54,20.456 52.89,20.878 52.23,21.312L52.23,21.314C51.43,21.839 50.65,22.38 49.87,22.933L49.87,22.934C48.98,23.578 48.1,24.242 47.23,24.926L47.23,24.925C46.49,25.514 45.75,26.117 45.03,26.732L45.03,26.73C44.44,27.235 43.87,27.748 43.29,28.271L43.29,28.273C42.59,28.911 41.9,29.562 41.23,30.227C40.55,30.892 39.89,31.568 39.25,32.258C38.5,33.059 37.77,33.878 37.04,34.712L37.04,34.709C36.53,35.307 36.03,35.913 35.55,36.528C34.95,37.266 34.36,38.015 33.8,38.778L33.81,38.78C33.25,39.54 32.7,40.311 32.16,41.093C31.55,42.002 30.95,42.926 30.36,43.862C29.88,44.666 29.39,45.479 28.93,46.302L28.93,46.3C28.53,47 28.15,47.708 27.78,48.423C27.34,49.26 26.93,50.105 26.52,50.959L26.52,50.96C26.11,51.816 25.73,52.681 25.36,53.553C24.92,54.562 24.51,55.582 24.13,56.613C23.87,57.33 23.61,58.053 23.36,58.78L23.37,58.781Z").toPath())
@@ -226,13 +222,7 @@ fun GlyphPreview(
             val dx = (size.width - viewBoxW * scale) / 2
             val dy = (size.height - viewBoxH * scale) / 2
 
-            // Anti-aliased high quality paint with Blur for "Bloom"
-            val glowRadius = 8f * scale
-            val paint = androidx.compose.ui.graphics.Paint().asFrameworkPaint().apply {
-                isAntiAlias = true
-                maskFilter = BlurMaskFilter(glowRadius, BlurMaskFilter.Blur.NORMAL)
-            }
-
+            // LOCAL HELPER for Alpha
             fun getA(idx: Int): Float {
                 val value = smoothedState.value.getOrElse(idx) { 0f }
                 return baseOpacity + (value * (1f - baseOpacity))
@@ -242,69 +232,32 @@ fun GlyphPreview(
                 translate(dx, dy)
                 scale(scale, scale, pivot = Offset.Zero)
             }) {
-                // Background Layer (Subtle Dim Glow)
-                // Draw all paths at baseOpacity first
                 when (device) {
                     DeviceProfile.DEVICE_NP1 -> {
-                        for (i in 0..6) drawPath(paths["p1_$i"]!!, color.copy(alpha = baseOpacity))
-                        drawPath(paths["p1_7-14"]!!, color.copy(alpha = baseOpacity))
+                        for (i in 0..6) drawPath(paths["p1_$i"]!!, color.copy(alpha = getA(i)))
+                        drawPathVerticalSegments(this, paths["p1_7-14"]!!, color, 7..14, smoothedState.value, baseOpacity)
                     }
                     DeviceProfile.DEVICE_NP2 -> {
-                        for (i in 0..2) drawPath(paths["p2_$i"]!!, color.copy(alpha = baseOpacity))
-                        drawPath(paths["p2_ring"]!!, color.copy(alpha = baseOpacity))
-                        for (i in 19..24) drawPath(paths["p2_$i"]!!, color.copy(alpha = baseOpacity))
-                        drawPath(paths["p2_25-32"]!!, color.copy(alpha = baseOpacity))
+                        drawPath(paths["p2_0"]!!, color.copy(alpha = getA(0)))
+                        drawPath(paths["p2_1"]!!, color.copy(alpha = getA(1)))
+                        drawPath(paths["p2_2"]!!, color.copy(alpha = getA(2)))
+                        drawPathRingSegments(this, paths["p2_3-18"]!!, color, (3..18).toList(), smoothedState.value, baseOpacity)
+                        for (i in 19..24) drawPath(paths["p2_$i"]!!, color.copy(alpha = getA(i)))
+                        drawPathVerticalSegments(this, paths["p2_25-32"]!!, color, 25..32, smoothedState.value, baseOpacity)
                     }
                     DeviceProfile.DEVICE_NP2A -> {
-                        drawPath(paths["p2a_0-23"]!!, color.copy(alpha = baseOpacity))
-                        drawPath(paths["p2a_24"]!!, color.copy(alpha = baseOpacity))
-                        drawPath(paths["p2a_25"]!!, color.copy(alpha = baseOpacity))
+                        drawPathRingSegments(this, paths["p2a_0-23"]!!, color, (0..23).toList(), smoothedState.value, baseOpacity)
+                        drawPath(paths["p2a_24"]!!, color.copy(alpha = getA(24)))
+                        drawPath(paths["p2a_25"]!!, color.copy(alpha = getA(25)))
                     }
                     DeviceProfile.DEVICE_NP3A -> {
-                        drawPath(paths["p3a_0-19"]!!, color.copy(alpha = baseOpacity))
-                        drawPath(paths["p3a_20-30"]!!, color.copy(alpha = baseOpacity))
-                        drawPath(paths["p3a_31-35"]!!, color.copy(alpha = baseOpacity))
-                    }
-                }
-
-                // Foreground Active Layer (Glow)
-                drawIntoCanvas { canvas ->
-                    when (device) {
-                        DeviceProfile.DEVICE_NP1 -> {
-                            for (i in 0..6) {
-                                paint.color = color.copy(alpha = getA(i)).toArgb()
-                                canvas.nativeCanvas.drawPath(paths["p1_$i"]!!.asAndroidPath(), paint)
-                            }
-                            drawPathVerticalSegmentsGlow(this, paths["p1_7-14"]!!, color, 7..14, smoothedState.value, paint)
-                        }
-                        DeviceProfile.DEVICE_NP2 -> {
-                            for (i in 0..2) {
-                                paint.color = color.copy(alpha = getA(i)).toArgb()
-                                canvas.nativeCanvas.drawPath(paths["p2_$i"]!!.asAndroidPath(), paint)
-                            }
-                            drawPathRingSegmentsGlow(this, paths["p2_ring"]!!, color, (3..18).toList(), smoothedState.value, paint)
-                            for (i in 19..24) {
-                                paint.color = color.copy(alpha = getA(i)).toArgb()
-                                canvas.nativeCanvas.drawPath(paths["p2_$i"]!!.asAndroidPath(), paint)
-                            }
-                            drawPathVerticalSegmentsGlow(this, paths["p2_25-32"]!!, color, 25..32, smoothedState.value, paint)
-                        }
-                        DeviceProfile.DEVICE_NP2A -> {
-                            drawPathRingSegmentsGlow(this, paths["p2a_0-23"]!!, color, (0..23).toList(), smoothedState.value, paint)
-                            paint.color = color.copy(alpha = getA(24)).toArgb()
-                            canvas.nativeCanvas.drawPath(paths["p2a_24"]!!.asAndroidPath(), paint)
-                            paint.color = color.copy(alpha = getA(25)).toArgb()
-                            canvas.nativeCanvas.drawPath(paths["p2a_25"]!!.asAndroidPath(), paint)
-                        }
-                        DeviceProfile.DEVICE_NP3A -> {
-                            withTransform({
-                                translate(-2f, 7f)
-                                scale(1.03f, 1.03f, pivot = Offset.Zero)
-                            }) {
-                                drawPathRingSegmentsGlow(this, paths["p3a_0-19"]!!, color, (0..19).toList(), smoothedState.value, paint)
-                                drawPathRingSegmentsGlow(this, paths["p3a_20-30"]!!, color, (20..30).toList(), smoothedState.value, paint)
-                                drawPathRingSegmentsGlow(this, paths["p3a_31-35"]!!, color, (31..35).toList(), smoothedState.value, paint)
-                            }
+                        withTransform({
+                            translate(-2f, 7f)
+                            scale(1.03f, 1.03f, pivot = Offset.Zero)
+                        }) {
+                            drawPathRingSegments(this, paths["p3a_0-19"]!!, color, (0..19).toList(), smoothedState.value, baseOpacity)
+                            drawPathRingSegments(this, paths["p3a_20-30"]!!, color, (20..30).toList(), smoothedState.value, baseOpacity)
+                            drawPathRingSegments(this, paths["p3a_31-35"]!!, color, (31..35).toList(), smoothedState.value, baseOpacity)
                         }
                     }
                 }
@@ -313,14 +266,13 @@ fun GlyphPreview(
     }
 }
 
-private fun drawPathRingSegmentsGlow(scope: DrawScope, path: Path, color: Color, indices: List<Int>, state: FloatArray, paint: android.graphics.Paint) {
+private fun drawPathRingSegments(scope: DrawScope, path: Path, color: Color, indices: List<Int>, state: FloatArray, baseOpacity: Float) {
     val b = path.getBounds()
     val count = indices.size
     val centerX = b.left + b.width/2
     val sliceH = b.height / (count / 2)
     indices.forEachIndexed { i, idx ->
-        val alpha = (state.getOrElse(idx) { 0f } * 0.85f)
-        if (alpha < 0.01f) return@forEachIndexed
+        val alpha = baseOpacity + (state.getOrElse(idx) { 0f } * (1f - baseOpacity))
         val isR = i >= count / 2
         val row = if (isR) i - (count/2) else i
         scope.clipRect(
@@ -329,28 +281,25 @@ private fun drawPathRingSegmentsGlow(scope: DrawScope, path: Path, color: Color,
             right = if (isR) 182f else centerX,
             bottom = b.top + (row + 1) * sliceH
         ) {
-            paint.color = color.copy(alpha = alpha).toArgb()
-            scope.drawIntoCanvas { it.nativeCanvas.drawPath(path.asAndroidPath(), paint) }
+            scope.drawPath(path, color.copy(alpha = alpha))
         }
     }
 }
 
-private fun drawPathVerticalSegmentsGlow(scope: DrawScope, path: Path, color: Color, range: IntRange, state: FloatArray, paint: android.graphics.Paint) {
+private fun drawPathVerticalSegments(scope: DrawScope, path: Path, color: Color, range: IntRange, state: FloatArray, baseOpacity: Float) {
     val b = path.getBounds()
     val count = range.last - range.first + 1
     val sliceH = b.height / count
     for (i in 0 until count) {
         val idx = range.first + i
-        val alpha = (state.getOrElse(idx) { 0f } * 0.85f)
-        if (alpha < 0.01f) continue
+        val alpha = baseOpacity + (state.getOrElse(idx) { 0f } * (1f - baseOpacity))
         scope.clipRect(
             left = 0f,
             top = b.bottom - (i + 1) * sliceH,
             right = 182f,
             bottom = b.bottom - i * sliceH
         ) {
-            paint.color = color.copy(alpha = alpha).toArgb()
-            scope.drawIntoCanvas { it.nativeCanvas.drawPath(path.asAndroidPath(), paint) }
+            scope.drawPath(path, color.copy(alpha = alpha))
         }
     }
 }
