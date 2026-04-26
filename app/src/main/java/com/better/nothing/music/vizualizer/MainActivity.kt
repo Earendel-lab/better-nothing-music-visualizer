@@ -51,6 +51,7 @@ import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.projection.MediaProjectionManager
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
@@ -69,7 +70,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -79,16 +79,17 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import androidx.lifecycle.AndroidViewModel
@@ -449,8 +450,12 @@ class MainActivity : ComponentActivity() {
     private var pendingResultCode = 0
     private var pendingData: Intent? = null
     private var hasPendingToken = false
+    private var pendingVisualizerStart = false
+    private var showProjectionInfoDialog by mutableStateOf(false)
 
     companion object {
+        const val EXTRA_REQUEST_START = "com.better.nothing.music.vizualizer.extra.REQUEST_START"
+        private const val PREF_PROJECTION_INFO_SHOWN = "projection_info_shown"
         var serviceStatic: AudioCaptureService? = null
             private set
     }
@@ -501,10 +506,12 @@ class MainActivity : ComponentActivity() {
                 if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
                     deliverProjectionToken(result.resultCode, data)
                 } else {
+                    pendingVisualizerStart = false
                     viewModel.setRunning(false)
                     Toast.makeText(this@MainActivity, "Audio recording permission is required", Toast.LENGTH_SHORT).show()
                 }
             } else {
+                pendingVisualizerStart = false
                 viewModel.setRunning(false)
                 Toast.makeText(this@MainActivity, "Screen capture permission denied", Toast.LENGTH_SHORT).show()
             }
@@ -514,6 +521,7 @@ class MainActivity : ComponentActivity() {
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (granted) requestProjection()
             else {
+                pendingVisualizerStart = false
                 viewModel.setRunning(false)
                 Toast.makeText(
                     this,
@@ -527,6 +535,7 @@ class MainActivity : ComponentActivity() {
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (granted) requestProjection()
             else {
+                pendingVisualizerStart = false
                 viewModel.setRunning(false)
                 Toast.makeText(
                     this,
@@ -565,6 +574,20 @@ class MainActivity : ComponentActivity() {
 
                 val selectedDevice by viewModel.selectedDevice.collectAsStateWithLifecycle()
 
+                if (showProjectionInfoDialog) {
+                    MediaProjectionInfoDialog(
+                        onDismiss = {
+                            pendingVisualizerStart = false
+                            showProjectionInfoDialog = false
+                        },
+                        onContinue = {
+                            markProjectionInfoShown()
+                            showProjectionInfoDialog = false
+                            continueVisualizerStartFlow()
+                        }
+                    )
+                }
+
                 BetterVizApp(
                     tab = tab,
                     onTabSelected = viewModel::selectTab,
@@ -598,6 +621,16 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+
+        if (savedInstanceState == null) {
+            mainHandler.post { handleLaunchIntent(intent) }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleLaunchIntent(intent)
     }
 
     override fun onStart() {
@@ -695,10 +728,34 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this, "No preset is currently available", Toast.LENGTH_SHORT).show()
             return
         }
+        beginVisualizerStartFlow()
+    }
+
+    private fun beginVisualizerStartFlow() {
+        pendingVisualizerStart = true
+        if (shouldShowProjectionInfo()) {
+            showProjectionInfoDialog = true
+            return
+        }
+        continueVisualizerStartFlow()
+    }
+
+    private fun continueVisualizerStartFlow() {
+        if (ContextCompat.checkSelfPermission(
+                this, Manifest.permission.RECORD_AUDIO
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            return
+        }
         requestProjection()
     }
 
     private fun requestProjection() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            launchProjection()
+            return
+        }
         if (ContextCompat.checkSelfPermission(
                 this, Manifest.permission.POST_NOTIFICATIONS
             ) != PackageManager.PERMISSION_GRANTED
@@ -719,6 +776,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun launchProjection() {
+        pendingVisualizerStart = false
         projectionLauncher.launch(projectionManager.createScreenCaptureIntent())
     }
 
@@ -784,6 +842,29 @@ class MainActivity : ComponentActivity() {
             this,
             ComponentName(this, VisualizerTileService::class.java)
         )
+    }
+
+    private fun handleLaunchIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_REQUEST_START, false) != true) return
+        intent.putExtra(EXTRA_REQUEST_START, false)
+        if (!AudioCaptureService.isRunning()) {
+            toggleVisualizer()
+        } else {
+            TileService.requestListeningState(
+                this,
+                ComponentName(this, VisualizerTileService::class.java)
+            )
+        }
+    }
+
+    private fun shouldShowProjectionInfo(): Boolean {
+        return !getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
+            .getBoolean(PREF_PROJECTION_INFO_SHOWN, false)
+    }
+
+    private fun markProjectionInfoShown() {
+        getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
+            .edit { putBoolean(PREF_PROJECTION_INFO_SHOWN, true) }
     }
 
     private fun resolvePreferredAudioRoute(): AudioRoute? {
@@ -857,6 +938,34 @@ private val HeavyEasingSpec = tween<Float>(
     durationMillis = 600,
     easing = EaseOutQuart
 )
+
+@Composable
+private fun MediaProjectionInfoDialog(
+    onDismiss: () -> Unit,
+    onContinue: () -> Unit,
+) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            androidx.compose.material3.Text("MediaProjection permission")
+        },
+        text = {
+            androidx.compose.material3.Text(
+                "This permission lets the app access the device audio stream through Android's capture system so the Glyph visualizer can react in real time. No unnecessary recordings are stored, and the app does not save your media or private data."
+            )
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = onContinue) {
+                androidx.compose.material3.Text("Continue")
+            }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                androidx.compose.material3.Text("Not now")
+            }
+        }
+    )
+}
 
 @Composable
 private fun BetterVizApp(
@@ -945,8 +1054,7 @@ private fun BetterVizApp(
     Scaffold(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .navigationBarsPadding(),
+            .background(MaterialTheme.colorScheme.background),
         containerColor = MaterialTheme.colorScheme.background,
         floatingActionButton = {
             StartStopButton(running = isRunning, onClick = onToggleVisualizer)

@@ -11,14 +11,22 @@ public class VisualizerTileService extends TileService {
     @Override public void onClick() {
         super.onClick();
         if (AudioCaptureService.isRunning()) {
-            stopService(new Intent(this,AudioCaptureService.class));
+            startService(AudioCaptureService.createStopIntent(this));
             refresh(false);
         } else {
             unlockAndRun(()->{
-                Intent i=new Intent(this,MainActivity.class);
-                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP|Intent.FLAG_ACTIVITY_CLEAR_TOP);
-                startActivityAndCollapse(i);
+                Intent i = new Intent(this, MainActivity.class);
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                i.putExtra(MainActivity.EXTRA_REQUEST_START, true);
+                PendingIntent pendingIntent = PendingIntent.getActivity(
+                        this,
+                        2,
+                        i,
+                        PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+                );
+                startActivityAndCollapse(pendingIntent);
             });
+            refresh(false);
         }
     }
     private void refresh() { refresh(AudioCaptureService.isRunning()); }

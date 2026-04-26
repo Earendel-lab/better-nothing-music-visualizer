@@ -67,7 +67,7 @@ public class AudioCaptureService extends Service {
     private static final String TAG = "GlyphViz:Service";
     private static final String CHANNEL_ID = "glyph_viz_channel";
     private static final int NOTIF_ID = 1;
-    private static final String ACTION_STOP = "com.better.nothing.music.vizualizer.action.STOP";
+    public static final String ACTION_STOP = "com.better.nothing.music.vizualizer.action.STOP";
 
     public static final String EXTRA_PRESET_KEY = "preset_key";
     public static final float DEFAULT_GAMMA = 2f;
@@ -370,6 +370,10 @@ public class AudioCaptureService extends Service {
 
     public static boolean isRunning() {
         return sIsRunning;
+    }
+
+    public static Intent createStopIntent(Context context) {
+        return new Intent(context, AudioCaptureService.class).setAction(ACTION_STOP);
     }
 
     public static int loadLatencyCompensationMs(Context context, int device) {
@@ -1230,7 +1234,7 @@ public class AudioCaptureService extends Service {
         PendingIntent stopIntent = PendingIntent.getService(
                 this,
                 1,
-                new Intent(this, AudioCaptureService.class).setAction(ACTION_STOP),
+                createStopIntent(this),
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
         );
 

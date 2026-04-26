@@ -1,5 +1,8 @@
 package com.better.nothing.music.vizualizer
 
+import android.content.Context
+import android.os.Build
+import android.provider.Settings
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
@@ -23,7 +26,10 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.PathParser
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.*
@@ -45,6 +51,7 @@ internal fun GlyphsScreen(
     viewModel: MainViewModel,
 ) {
     val mainScrollState = rememberScrollState()
+    val context = LocalContext.current
 
     val selectedInfo = remember(selectedPreset, presets) {
         presets.firstOrNull { it.key == selectedPreset } ?: presets.firstOrNull()
@@ -61,6 +68,12 @@ internal fun GlyphsScreen(
         Spacer(modifier = Modifier.height(20.dp))
 
         ScreenTitle(text = stringResource(R.string.glyph_controls))
+
+        if (selectedDevice == DeviceProfile.DEVICE_NP1 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+            GlyphDebugWarningCard(
+                developerModeEnabled = isDeveloperOptionsEnabled(context)
+            )
+        }
 
         Text(
             text = stringResource(R.string.gamma_control),
@@ -151,6 +164,57 @@ internal fun GlyphsScreen(
 }
 
 @Composable
+private fun GlyphDebugWarningCard(
+    developerModeEnabled: Boolean,
+) {
+    Card(
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = "Nothing Phone (1) on Android 15",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            BodyText(
+                text = if (developerModeEnabled) {
+                    "Glyph features need the Nothing glyph debug interface enabled through ADB on this device."
+                } else {
+                    "Glyph features need Developer options enabled first on Nothing Phone (1) running Android 15. After that, run this ADB command:"
+                }
+            )
+            Text(
+                text = "adb shell settings put global nt_glyph_interface_debug_enable 1",
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.bodyLarge,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Medium,
+            )
+            if (developerModeEnabled) {
+                BodyText(
+                    text = "Run the command once from a computer with ADB, then reopen the app if the Glyphs still do not respond.",
+                    size = 14.sp,
+                    lineHeight = 20.sp,
+                )
+            }
+        }
+    }
+}
+
+private fun isDeveloperOptionsEnabled(context: Context): Boolean {
+    return Settings.Global.getInt(
+        context.contentResolver,
+        Settings.Global.DEVELOPMENT_SETTINGS_ENABLED,
+        0
+    ) == 1
+}
+
+@Composable
 fun GlyphPreview(
     vizState: FloatArray,
     device: Int,
@@ -236,30 +300,54 @@ fun GlyphPreview(
             }) {
                 when (device) {
                     DeviceProfile.DEVICE_NP1 -> {
-                        for (i in 0..6) drawPath(paths["p1_$i"]!!, color.copy(alpha = getA(i)))
-                        drawPathVerticalSegments(this, paths["p1_7-14"]!!, color, 7..14, smoothedState.value, baseOpacity)
+                        listOf(
+                            "p1_cam",
+                            "p1_slash",
+                            "p1_ring_bl",
+                            "p1_ring_br",
+                            "p1_ring_tr",
+                            "p1_ring_tl",
+                            "p1_dot",
+                            "p1_battery",
+                        ).forEachIndexed { index, key ->
+                            paths[key]?.let { drawPath(it, color.copy(alpha = getA(index))) }
+                        }
                     }
                     DeviceProfile.DEVICE_NP2 -> {
-                        drawPath(paths["p2_0"]!!, color.copy(alpha = getA(0)))
-                        drawPath(paths["p2_1"]!!, color.copy(alpha = getA(1)))
-                        drawPath(paths["p2_2"]!!, color.copy(alpha = getA(2)))
-                        drawPathRingSegments(this, paths["p2_3-18"]!!, color, (3..18).toList(), smoothedState.value, baseOpacity)
-                        for (i in 19..24) drawPath(paths["p2_$i"]!!, color.copy(alpha = getA(i)))
-                        drawPathVerticalSegments(this, paths["p2_25-32"]!!, color, 25..32, smoothedState.value, baseOpacity)
+                        paths["p2_0"]?.let { drawPath(it, color.copy(alpha = getA(0))) }
+                        paths["p2_1"]?.let { drawPath(it, color.copy(alpha = getA(1))) }
+                        paths["p2_2"]?.let { drawPath(it, color.copy(alpha = getA(2))) }
+                        paths["p2_ring"]?.let {
+                            drawPathRingSegments(this, it, color, (3..18).toList(), smoothedState.value, baseOpacity)
+                        }
+                        for (i in 19..24) {
+                            paths["p2_$i"]?.let { drawPath(it, color.copy(alpha = getA(i))) }
+                        }
+                        paths["p2_battery"]?.let {
+                            drawPathVerticalSegments(this, it, color, 25..32, smoothedState.value, baseOpacity)
+                        }
                     }
                     DeviceProfile.DEVICE_NP2A -> {
-                        drawPathRingSegments(this, paths["p2a_0-23"]!!, color, (0..23).toList(), smoothedState.value, baseOpacity)
-                        drawPath(paths["p2a_24"]!!, color.copy(alpha = getA(24)))
-                        drawPath(paths["p2a_25"]!!, color.copy(alpha = getA(25)))
+                        paths["p2a_0-23"]?.let {
+                            drawPathRingSegments(this, it, color, (0..23).toList(), smoothedState.value, baseOpacity)
+                        }
+                        paths["p2a_24"]?.let { drawPath(it, color.copy(alpha = getA(24))) }
+                        paths["p2a_25"]?.let { drawPath(it, color.copy(alpha = getA(25))) }
                     }
                     DeviceProfile.DEVICE_NP3A -> {
                         withTransform({
                             translate(-2f, 7f)
                             scale(1.03f, 1.03f, pivot = Offset.Zero)
                         }) {
-                            drawPathRingSegments(this, paths["p3a_0-19"]!!, color, (0..19).toList(), smoothedState.value, baseOpacity)
-                            drawPathRingSegments(this, paths["p3a_20-30"]!!, color, (20..30).toList(), smoothedState.value, baseOpacity)
-                            drawPathRingSegments(this, paths["p3a_31-35"]!!, color, (31..35).toList(), smoothedState.value, baseOpacity)
+                            paths["p3a_0-19"]?.let {
+                                drawPathRingSegments(this, it, color, (0..19).toList(), smoothedState.value, baseOpacity)
+                            }
+                            paths["p3a_20-30"]?.let {
+                                drawPathRingSegments(this, it, color, (20..30).toList(), smoothedState.value, baseOpacity)
+                            }
+                            paths["p3a_31-35"]?.let {
+                                drawPathRingSegments(this, it, color, (31..35).toList(), smoothedState.value, baseOpacity)
+                            }
                         }
                     }
                 }
