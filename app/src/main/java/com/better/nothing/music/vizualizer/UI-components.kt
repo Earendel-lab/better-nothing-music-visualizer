@@ -2,7 +2,9 @@
 
 package com.better.nothing.music.vizualizer
 
+import android.app.Activity
 import android.content.Context
+import android.view.MotionEvent
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
@@ -17,6 +19,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -64,7 +67,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.pointerInteropFilter
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -355,6 +362,7 @@ fun ExpressiveRangeSlider(
     valueRange: ClosedFloatingPointRange<Float>,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val startInteractionSource = remember { MutableInteractionSource() }
     val endInteractionSource = remember { MutableInteractionSource() }
     val haptics = LocalHapticFeedback.current
@@ -366,47 +374,49 @@ fun ExpressiveRangeSlider(
 
     val isAnyActive = startActive || startDragged || endActive || endDragged
 
-    // Overall track expansion factor
+    // Animation and Haptic logic remains the same...
     val animationFactor by animateFloatAsState(
         targetValue = if (isAnyActive) 2.1f else 1.0f,
         animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessLow),
         label = "track_bloom"
     )
 
-    // Individual thumb "thinning" factors
     val startThumbFactor by animateFloatAsState(if (startActive || startDragged) 2.1f else 1.0f)
     val endThumbFactor by animateFloatAsState(if (endActive || endDragged) 2.1f else 1.0f)
 
-    // Haptics Logic
     LaunchedEffect(isAnyActive) {
-        if (isAnyActive) {
-            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-        } else {
-            haptics.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
-        }
+        if (isAnyActive) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
     }
-
+    val view = LocalView.current
     RangeSlider(
         value = value,
         onValueChange = onValueChange,
         valueRange = valueRange,
         startInteractionSource = startInteractionSource,
         endInteractionSource = endInteractionSource,
-        modifier = modifier.height(64.dp), // Increased height for the bloom
-        startThumb = {
-            ExpressiveThumb(factor = startThumbFactor)
-        },
-        endThumb = {
-            ExpressiveThumb(factor = endThumbFactor)
-        },
+        modifier = modifier
+            .height(64.dp)
+            .pointerInteropFilter { motionEvent ->
+                when (motionEvent.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        // Use the view to tell the parent to stop intercepting
+                        view.parent?.requestDisallowInterceptTouchEvent(true)
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        view.parent?.requestDisallowInterceptTouchEvent(false)
+                    }
+                }
+                false // Crucial: return false so the RangeSlider still processes the touch
+            },
+        startThumb = { ExpressiveThumb(factor = startThumbFactor) },
+        endThumb = { ExpressiveThumb(factor = endThumbFactor) },
         track = { rangeSliderState ->
             val trackHeight = 12.dp * animationFactor
-
             SliderDefaults.Track(
                 rangeSliderState = rangeSliderState,
                 modifier = Modifier.height(trackHeight),
                 thumbTrackGapSize = 4.dp,
-                drawStopIndicator = null, // Cleaner look for expressive style
+                drawStopIndicator = null,
                 colors = SliderDefaults.colors(
                     activeTrackColor = MaterialTheme.colorScheme.primary,
                     inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant

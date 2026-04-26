@@ -1,5 +1,6 @@
 package com.better.nothing.music.vizualizer
 
+import android.app.Activity
 import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -72,7 +73,7 @@ fun HapticsScreen() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 8.dp)
+            .padding(horizontal = 16.dp) // Standardized padding
             .verticalScroll(scrollState),
         verticalArrangement = Arrangement.spacedBy(22.dp),
     ) {
@@ -89,12 +90,12 @@ fun HapticsScreen() {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
+                    .padding(20.dp), // Increased padding for better touch target
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Audio-Reactive Haptic Motor",
+                    text = "Audio-Reactive Haptics",
                     style = MaterialTheme.typography.titleMedium,
                     color = Color(0xFFE6E1E3)
                 )
@@ -115,43 +116,39 @@ fun HapticsScreen() {
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(
+                    modifier = Modifier.padding(20.dp), // FIXED: Added missing padding
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     Text(
-                        text = "Haptic Frequency: ${hapticFreqMin.toInt()} - ${hapticFreqMax.toInt()} Hz",
-                        style = MaterialTheme.typography.bodyMedium,
+                        text = "Frequency: ${hapticFreqMin.toInt()} - ${hapticFreqMax.toInt()} Hz",
+                        style = MaterialTheme.typography.titleMedium,
                         color = Color(0xFFE6E1E3)
                     )
 
-                    // Convert our stored frequencies to a 0f..1f range for the slider
-                    val currentRange =
-                        invLerpLog(hapticFreqMin, 20f, 2000f)..invLerpLog(hapticFreqMax, 20f, 2000f)
+                    val currentRange = invLerpLog(hapticFreqMin, 20f, 1000f)..invLerpLog(hapticFreqMax, 20f, 1000f)
 
                     ExpressiveRangeSlider(
                         value = currentRange,
                         onValueChange = { newRange ->
-                            // Convert the 0..1 slider positions back to Hz
-                            val newMin = lerpLog(newRange.start, 20f, 2000f)
-                            val newMax = lerpLog(newRange.endInclusive, 20f, 2000f)
+                            val newMin = lerpLog(newRange.start, 20f, 1000f)
+                            val newMax = lerpLog(newRange.endInclusive, 20f, 1000f)
 
-                            // Enforce a minimum gap of 10Hz
                             if (newMax - newMin >= 10f) {
                                 hapticFreqMin = newMin
                                 hapticFreqMax = newMax
-
                                 prefs.edit()
                                     .putInt("haptic_freq_min", newMin.toInt())
                                     .putInt("haptic_freq_max", newMax.toInt())
                                     .apply()
                             }
                         },
-                        valueRange = 0f..1f, // The slider always operates on a 0..1 scale internally
+                        valueRange = 0f..1f,
                         modifier = Modifier.fillMaxWidth()
                     )
 
-
-
                     BodyText(
-                        text = "Haptic motor will vibrate with the amplitude of audio frequencies in this range.",
+                        text = "Vibrates based on audio amplitude in this range.",
                         size = 12.sp
                     )
                 }
@@ -164,13 +161,11 @@ fun HapticsScreen() {
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
+                    modifier = Modifier.padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = "Amplitude Multiplier: ${String.format("%.2f", hapticMultiplier)}x",
+                        text = "Amplitude: ${"%.2f".format(hapticMultiplier)}x",
                         style = MaterialTheme.typography.titleMedium,
                         color = Color(0xFFE6E1E3)
                     )
@@ -180,12 +175,8 @@ fun HapticsScreen() {
                             hapticMultiplier = newVal
                             prefs.edit().putFloat("haptic_multiplier", hapticMultiplier).apply()
                         },
-                        valueRange = 0.1f..5.0f,
+                        valueRange = 0.5f..1.5f,
                         modifier = Modifier.fillMaxWidth()
-                    )
-                    BodyText(
-                        text = "Scales the vibration amplitude (0.1x to 5.0x).",
-                        size = 12.sp
                     )
                 }
             }
@@ -197,13 +188,11 @@ fun HapticsScreen() {
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
+                    modifier = Modifier.padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = "Gamma (Curve): ${String.format("%.2f", hapticGamma)}",
+                        text = "Gamma (Response): ${"%.2f".format(hapticGamma)}",
                         style = MaterialTheme.typography.titleMedium,
                         color = Color(0xFFE6E1E3)
                     )
@@ -213,18 +202,12 @@ fun HapticsScreen() {
                             hapticGamma = newVal
                             prefs.edit().putFloat("haptic_gamma", hapticGamma).apply()
                         },
-                        valueRange = 0.5f..4.0f,
+                        valueRange = 1f..4.0f,
                         modifier = Modifier.fillMaxWidth()
-                    )
-                    BodyText(
-                        text = "Controls the response curve. Higher values emphasize peaks, lower values are more linear.",
-                        size = 12.sp
                     )
                 }
             }
         }
-
         Spacer(modifier = Modifier.height(28.dp))
     }
 }
-
