@@ -41,7 +41,6 @@ CHANGELOG HERE PLEASE: 2.7 TO 2.8:
 package com.better.nothing.music.vizualizer
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.app.Application
 import android.content.ComponentName
 import android.content.Context
@@ -65,8 +64,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.annotation.RequiresPermission
 import androidx.compose.animation.core.EaseOutQuart
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -93,6 +90,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
@@ -175,7 +173,7 @@ internal class MainViewModel(application: Application) : AndroidViewModel(applic
         _gainValue.value = value
         viewModelScope.launch(Dispatchers.IO) {
             ctx.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
-                .edit().putFloat("audio_gain", value).apply()
+                .edit { putFloat("audio_gain", value) }
         }
     }
 
@@ -219,7 +217,7 @@ internal class MainViewModel(application: Application) : AndroidViewModel(applic
         _selectedTheme.value = theme
         viewModelScope.launch(Dispatchers.IO) {
             ctx.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
-                .edit().putString("selected_theme", theme).apply()
+                .edit { putString("selected_theme", theme) }
         }
     }
 
@@ -227,7 +225,7 @@ internal class MainViewModel(application: Application) : AndroidViewModel(applic
         _selectedFont.value = font
         viewModelScope.launch(Dispatchers.IO) {
             ctx.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
-                .edit().putString("selected_font", font).apply()
+                .edit { putString("selected_font", font) }
         }
     }
 
@@ -262,7 +260,7 @@ internal class MainViewModel(application: Application) : AndroidViewModel(applic
         _hapticMotorEnabled.value = enabled
         viewModelScope.launch(Dispatchers.IO) {
             ctx.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
-                .edit().putBoolean("haptic_motor_enabled", enabled).apply()
+                .edit { putBoolean("haptic_motor_enabled", enabled) }
         }
     }
 
@@ -270,7 +268,7 @@ internal class MainViewModel(application: Application) : AndroidViewModel(applic
         _hapticImpactEnabled.value = enabled
         viewModelScope.launch(Dispatchers.IO) {
             ctx.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
-                .edit().putBoolean("haptic_impact_enabled", enabled).apply()
+                .edit { putBoolean("haptic_impact_enabled", enabled) }
         }
     }
 
@@ -279,10 +277,10 @@ internal class MainViewModel(application: Application) : AndroidViewModel(applic
         _hapticFreqMax.value = max
         viewModelScope.launch(Dispatchers.IO) {
             ctx.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
-                .edit()
-                .putInt("haptic_freq_min", min.toInt())
-                .putInt("haptic_freq_max", max.toInt())
-                .apply()
+                .edit {
+                    putInt("haptic_freq_min", min.toInt())
+                    putInt("haptic_freq_max", max.toInt())
+                }
         }
     }
 
@@ -290,7 +288,7 @@ internal class MainViewModel(application: Application) : AndroidViewModel(applic
         _hapticMultiplier.value = multiplier
         viewModelScope.launch(Dispatchers.IO) {
             ctx.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
-                .edit().putFloat("haptic_multiplier", multiplier).apply()
+                .edit { putFloat("haptic_multiplier", multiplier) }
         }
     }
 
@@ -298,7 +296,7 @@ internal class MainViewModel(application: Application) : AndroidViewModel(applic
         _hapticGamma.value = gamma
         viewModelScope.launch(Dispatchers.IO) {
             ctx.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
-                .edit().putFloat("haptic_gamma", gamma).apply()
+                .edit { putFloat("haptic_gamma", gamma) }
         }
     }
 
@@ -306,7 +304,7 @@ internal class MainViewModel(application: Application) : AndroidViewModel(applic
         _autoDeviceEnabled.value = enabled
         viewModelScope.launch(Dispatchers.IO) {
             ctx.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
-                .edit().putBoolean("auto_device_enabled", enabled).apply()
+                .edit { putBoolean("auto_device_enabled", enabled) }
         }
         return reloadLatencyForCurrentRoute()
     }
@@ -497,31 +495,42 @@ class MainActivity : ComponentActivity() {
     }
 
     private val projectionLauncher =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) @RequiresPermission(
-            Manifest.permission.RECORD_AUDIO
-        ) { result ->
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             val data = result.data
             if (result.resultCode == RESULT_OK && data != null) {
-                if (ActivityCompat.checkSelfPermission(
-                        this,
-                        Manifest.permission.RECORD_AUDIO
-                    ) != PackageManager.PERMISSION_GRANTED
-                )
+                if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
                     deliverProjectionToken(result.resultCode, data)
+                } else {
+                    viewModel.setRunning(false)
+                    Toast.makeText(this@MainActivity, "Audio recording permission is required", Toast.LENGTH_SHORT).show()
+                }
             } else {
                 viewModel.setRunning(false)
-                Toast.makeText(this, "Screen capture permission denied", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MainActivity, "Screen capture permission denied", Toast.LENGTH_SHORT).show()
             }
         }
 
     private val notificationLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) launchProjection()
+            if (granted) requestProjection()
             else {
                 viewModel.setRunning(false)
                 Toast.makeText(
                     this,
                     "Notifications are required while the visualizer is active",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+
+    private val audioPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) requestProjection()
+            else {
+                viewModel.setRunning(false)
+                Toast.makeText(
+                    this,
+                    "Audio recording permission is required",
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -546,8 +555,6 @@ class MainActivity : ComponentActivity() {
                 val gainValue      by viewModel.gainValue.collectAsStateWithLifecycle()
                 val presets        by viewModel.presetInfos.collectAsStateWithLifecycle()
                 val selectedPreset by viewModel.selectedPreset.collectAsStateWithLifecycle()
-                val glyphTabEnabled by viewModel.glyphTabEnabled.collectAsStateWithLifecycle()
-                val hapticsTabEnabled by viewModel.hapticsTabEnabled.collectAsStateWithLifecycle()
 
                 val hapticMotorEnabled by viewModel.hapticMotorEnabled.collectAsStateWithLifecycle()
                 val hapticImpactEnabled by viewModel.hapticImpactEnabled.collectAsStateWithLifecycle()
@@ -699,6 +706,15 @@ class MainActivity : ComponentActivity() {
             notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             return
         }
+
+        if (ContextCompat.checkSelfPermission(
+                this, Manifest.permission.RECORD_AUDIO
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            return
+        }
+
         launchProjection()
     }
 
@@ -706,7 +722,6 @@ class MainActivity : ComponentActivity() {
         projectionLauncher.launch(projectionManager.createScreenCaptureIntent())
     }
 
-    @RequiresPermission(Manifest.permission.RECORD_AUDIO)
     private fun deliverProjectionToken(resultCode: Int, data: Intent) {
         val serviceIntent = Intent(this, AudioCaptureService::class.java).apply {
             putExtra(AudioCaptureService.EXTRA_PRESET_KEY, viewModel.currentPreset())
@@ -886,7 +901,7 @@ private fun BetterVizApp(
         if (isRunning) {
             while (true) {
                 MainActivity.serviceStatic?.let { s ->
-                    viewModel.updateVisualizerState(s.getCurrentLightState())
+                    viewModel.updateVisualizerState(s.currentLightState)
                 }
                 delay(16)
             }
