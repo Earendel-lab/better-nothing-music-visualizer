@@ -174,6 +174,16 @@ public class AudioCaptureService extends Service {
     private volatile float mGamma = DEFAULT_GAMMA;
     private volatile float mGain = 1.0f;
 
+    private boolean mIdleBreathingEnabled = false;
+    private long mSilenceStartTimeMs = 0;
+    private static final float SILENCE_THRESHOLD = 0.005f;
+    private static final long BREATH_DELAY_MS = 3000L;
+    private static final long BREATH_PERIOD_MS = 5000L;
+
+    private boolean mNotificationFlashEnabled = false;
+    private long mLastNotificationFlashMs = 0;
+    private static final long FLASH_DURATION_MS = 200L;
+
     private volatile boolean mHapticEnabled = false;
     private volatile boolean mHapticImpactEnabled = false;
     private volatile float mHapticMultiplier = 1.0f;
@@ -309,6 +319,11 @@ public class AudioCaptureService extends Service {
         mSelectedDevice = DeviceProfile.detectDevice();
         mLatencyCompensationMs = loadLatencyCompensationMs(this, mSelectedDevice);
         mGamma = loadGamma(this);
+
+        SharedPreferences appPrefs = getSharedPreferences(APP_PREFS_NAME, MODE_PRIVATE);
+        mIdleBreathingEnabled = appPrefs.getBoolean("idle_breathing_enabled", false);
+        mNotificationFlashEnabled = appPrefs.getBoolean("notification_flash_enabled", false);
+
         refreshLatencyForCurrentAudioRoute();
 
         try {
@@ -534,6 +549,21 @@ public class AudioCaptureService extends Service {
 
     public void setGain(float gain) {
         mGain = gain;
+    }
+
+    public void setIdleBreathingEnabled(boolean enabled) {
+        mIdleBreathingEnabled = enabled;
+        if (!enabled) mSilenceStartTimeMs = 0;
+    }
+
+    public void setNotificationFlashEnabled(boolean enabled) {
+        mNotificationFlashEnabled = enabled;
+    }
+
+    public void triggerNotificationFlash() {
+        if (mNotificationFlashEnabled) {
+            mLastNotificationFlashMs = SystemClock.elapsedRealtime();
+        }
     }
 
     public void setHapticEnabled(boolean enabled) {
@@ -836,6 +866,15 @@ public class AudioCaptureService extends Service {
         ensureStateArrays(config.zones.length, config.uniqueRanges.length);
 
         float[] nextLightState = computeNextLightState(uniquePeaks, config);
+
+        long nowMs = SystemClock.elapsedRealtime();
+        if (nowMs - mLastNotificationFlashMs < FLASH_DURATION_MS) {
+            // Force 100% brightness for all zones during flash
+            Arrays.fill(nextLightState, 1.0f);
+        } else if (mIdleBreathingEnabled) {
+            applyIdleBreathing(nextLightState, uniquePeaks);
+        }
+
         System.arraycopy(nextLightState, 0, mCurrentLightState, 0, nextLightState.length);
 
         int[] frameColors = buildFrameColors(nextLightState, config.zones.length);
@@ -850,6 +889,38 @@ public class AudioCaptureService extends Service {
             mLastSendMs = now;
         } catch (Exception e) {
             Log.w(TAG, "Failed to push frame colors", e);
+        }
+    }
+
+    private void applyIdleBreathing(float[] nextState, float[] uniquePeaks) {
+        boolean isSilent = true;
+        for (float peak : uniquePeaks) {
+            if (peak * SPECTRUM_GAIN * mGain > SILENCE_THRESHOLD) {
+                isSilent = false;
+                break;
+            }
+        }
+
+        long now = SystemClock.elapsedRealtime();
+        if (isSilent) {
+            if (mSilenceStartTimeMs == 0) {
+                mSilenceStartTimeMs = now;
+            }
+
+            long silenceDuration = now - mSilenceStartTimeMs;
+            if (silenceDuration > BREATH_DELAY_MS) {
+                float progress = ((float)((silenceDuration - BREATH_DELAY_MS) % BREATH_PERIOD_MS)) / BREATH_PERIOD_MS;
+                // Sinusoidal breath: 0.0 to 1.0 to 0.0
+                float breathIntensity = (float) (0.5f * (1.0f + Math.sin(2.0 * Math.PI * progress - Math.PI / 2.0)));
+                // Scale it down so it's subtle (max 15% brightness)
+                float subtleBreath = breathIntensity * 0.15f;
+
+                for (int i = 0; i < nextState.length; i++) {
+                    nextState[i] = Math.max(nextState[i], subtleBreath);
+                }
+            }
+        } else {
+            mSilenceStartTimeMs = 0;
         }
     }
 

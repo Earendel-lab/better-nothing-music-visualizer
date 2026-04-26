@@ -29,6 +29,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -57,7 +58,13 @@ import androidx.compose.foundation.layout.size
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
-internal fun SettingsScreen(viewModel: MainViewModel) {
+internal fun SettingsScreen(
+    viewModel: MainViewModel,
+    idleBreathingEnabled: Boolean,
+    onIdleBreathingEnabledChanged: (Boolean) -> Unit,
+    notificationFlashEnabled: Boolean,
+    onNotificationFlashEnabledChanged: (Boolean) -> Unit,
+) {
     val scrollState = rememberScrollState()
 
     var themeExpanded by remember { mutableStateOf(false) }
@@ -110,6 +117,46 @@ internal fun SettingsScreen(viewModel: MainViewModel) {
             },
             helperText = stringResource(R.string.typography_help_text)
         )
+
+        // ── Visualizer Features ──────────────────────────────────────────────
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = "Experimental Features",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
+
+            Card(
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    FeatureToggle(
+                        title = "Idle Breathing",
+                        description = "Glyphs pulse subtly when the visualizer is active but no audio is playing.",
+                        checked = idleBreathingEnabled,
+                        onCheckedChange = onIdleBreathingEnabledChanged
+                    )
+                    
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
+
+                    FeatureToggle(
+                        title = "Notification Flash",
+                        description = "Flashes all Glyphs briefly when a new notification arrives while the visualizer is running.",
+                        checked = notificationFlashEnabled,
+                        onCheckedChange = onNotificationFlashEnabledChanged
+                    )
+                }
+            }
+            
+            Text(
+                text = "Tip: You can shake your phone while on this screen to check for configuration updates!",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.Gray,
+                modifier = Modifier.padding(horizontal = 8.dp)
+            )
+        }
 
         // ── Zones Configuration ──────────────────────────────────────────────
         val configStatus by viewModel.configUpdateStatus.collectAsStateWithLifecycle()
@@ -180,6 +227,33 @@ internal fun SettingsScreen(viewModel: MainViewModel) {
 
         BodyText(text = stringResource(R.string.more_settings_coming))
         Spacer(modifier = Modifier.height(28.dp))
+    }
+}
+
+@Composable
+private fun FeatureToggle(
+    title: String,
+    description: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = title, style = MaterialTheme.typography.titleMedium)
+            Text(text = description, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                checkedTrackColor = MaterialTheme.colorScheme.primary
+            )
+        )
     }
 }
 

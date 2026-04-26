@@ -50,6 +50,10 @@ import android.content.pm.PackageManager
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
@@ -211,6 +215,12 @@ internal class MainViewModel(application: Application) : AndroidViewModel(applic
     private val _hapticsTabEnabled = MutableStateFlow(true)
     val hapticsTabEnabled = _hapticsTabEnabled.asStateFlow()
 
+    private val _idleBreathingEnabled = MutableStateFlow(false)
+    val idleBreathingEnabled = _idleBreathingEnabled.asStateFlow()
+
+    private val _notificationFlashEnabled = MutableStateFlow(false)
+    val notificationFlashEnabled = _notificationFlashEnabled.asStateFlow()
+
     // ── Zones Update ──────────────────────────────────────────────────────────
     private val _configUpdateStatus = MutableStateFlow<ConfigUpdateStatus>(ConfigUpdateStatus.Idle)
     val configUpdateStatus = _configUpdateStatus.asStateFlow()
@@ -357,6 +367,22 @@ internal class MainViewModel(application: Application) : AndroidViewModel(applic
         }
     }
 
+    fun setIdleBreathingEnabled(enabled: Boolean) {
+        _idleBreathingEnabled.value = enabled
+        viewModelScope.launch(Dispatchers.IO) {
+            ctx.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
+                .edit { putBoolean("idle_breathing_enabled", enabled) }
+        }
+    }
+
+    fun setNotificationFlashEnabled(enabled: Boolean) {
+        _notificationFlashEnabled.value = enabled
+        viewModelScope.launch(Dispatchers.IO) {
+            ctx.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
+                .edit { putBoolean("notification_flash_enabled", enabled) }
+        }
+    }
+
     fun setAutoDeviceEnabled(enabled: Boolean): Int {
         _autoDeviceEnabled.value = enabled
         viewModelScope.launch(Dispatchers.IO) {
@@ -408,6 +434,9 @@ internal class MainViewModel(application: Application) : AndroidViewModel(applic
                 _autoDeviceEnabled.value = prefs.getBoolean("auto_device_enabled", true)
                 _glyphTabEnabled.value = prefs.getBoolean("glyph_tab_enabled", true)
                 _hapticsTabEnabled.value = prefs.getBoolean("haptics_tab_enabled", true)
+
+                _idleBreathingEnabled.value = prefs.getBoolean("idle_breathing_enabled", false)
+                _notificationFlashEnabled.value = prefs.getBoolean("notification_flash_enabled", false)
 
                 _gainValue.value = prefs.getFloat("audio_gain", 1.0f)
 
@@ -504,7 +533,7 @@ internal class MainViewModel(application: Application) : AndroidViewModel(applic
 // ─── Activity ─────────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
-class MainActivity : ComponentActivity() {
+class MainActivity : ComponentActivity(), SensorEventListener {
 
     // viewModels() returns the same instance across configuration changes.
     private val viewModel: MainViewModel by viewModels()
@@ -515,6 +544,10 @@ class MainActivity : ComponentActivity() {
 
     private val projectionManager by lazy {
         getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+    }
+
+    private val sensorManager by lazy {
+        getSystemService(SENSOR_SERVICE) as SensorManager
     }
 
     private var service: AudioCaptureService? = null
@@ -644,6 +677,9 @@ class MainActivity : ComponentActivity() {
                 val hapticMultiplier by viewModel.hapticMultiplier.collectAsStateWithLifecycle()
                 val hapticGamma by viewModel.hapticGamma.collectAsStateWithLifecycle()
 
+                val idleBreathingEnabled by viewModel.idleBreathingEnabled.collectAsStateWithLifecycle()
+                val notificationFlashEnabled by viewModel.notificationFlashEnabled.collectAsStateWithLifecycle()
+
                 val selectedDevice by viewModel.selectedDevice.collectAsStateWithLifecycle()
 
                 if (showProjectionInfoDialog) {
@@ -689,6 +725,10 @@ class MainActivity : ComponentActivity() {
                     onHapticMultiplierChanged = ::onHapticMultiplierChanged,
                     hapticGamma = hapticGamma,
                     onHapticGammaChanged = ::onHapticGammaChanged,
+                    idleBreathingEnabled = idleBreathingEnabled,
+                    onIdleBreathingEnabledChanged = ::onIdleBreathingEnabledChanged,
+                    notificationFlashEnabled = notificationFlashEnabled,
+                    onNotificationFlashEnabledChanged = ::onNotificationFlashEnabledChanged,
                     selectedDevice = selectedDevice,
                 )
             }
@@ -709,10 +749,15 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         audioManager.registerAudioDeviceCallback(audioDeviceCallback, mainHandler)
         refreshConnectedAudioRoute()
+
+        sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let { accel ->
+            sensorManager.registerListener(this, accel, SensorManager.SENSOR_DELAY_UI)
+        }
     }
 
     override fun onStop() {
         audioManager.unregisterAudioDeviceCallback(audioDeviceCallback)
+        sensorManager.unregisterListener(this)
         super.onStop()
     }
 
@@ -782,6 +827,38 @@ class MainActivity : ComponentActivity() {
         service?.setHapticGamma(gamma)
     }
 
+    private fun onIdleBreathingEnabledChanged(enabled: Boolean) {
+        viewModel.setIdleBreathingEnabled(enabled)
+        service?.setIdleBreathingEnabled(enabled)
+    }
+
+    private fun onNotificationFlashEnabledChanged(enabled: Boolean) {
+        if (enabled && !isNotificationServiceEnabled()) {
+            Toast.makeText(this, "Please enable notification access for this feature", Toast.LENGTH_LONG).show()
+            startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))
+            return
+        }
+        viewModel.setNotificationFlashEnabled(enabled)
+        service?.setNotificationFlashEnabled(enabled)
+    }
+
+    private fun isNotificationServiceEnabled(): Boolean {
+        val pkgName = packageName
+        val flat = android.provider.Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
+        if (!flat.isNullOrEmpty()) {
+            val names = flat.split(":".toRegex()).dropLastWhile { it.isEmpty() }.toTypedArray()
+            for (name in names) {
+                val cn = ComponentName.unflattenFromString(name)
+                if (cn != null) {
+                    if (pkgName == cn.packageName) {
+                        return true
+                    }
+                }
+            }
+        }
+        return false
+    }
+
     private fun onPresetSelected(key: String) {
         viewModel.setSelectedPreset(key)
         service?.setPreset(key)
@@ -822,6 +899,38 @@ class MainActivity : ComponentActivity() {
         }
         requestProjection()
     }
+
+    // ── Shake to Update ──────────────────────────────────────────────────────
+
+    private var lastShakeTime: Long = 0
+    private val SHAKE_THRESHOLD = 12.0f
+    private val SHAKE_COOLDOWN = 2000L
+
+    override fun onSensorChanged(event: SensorEvent?) {
+        if (event == null || event.sensor.type != Sensor.TYPE_ACCELEROMETER) return
+        if (viewModel.selectedTab.value != Tab.Settings) return
+
+        val x = event.values[0]
+        val y = event.values[1]
+        val z = event.values[2]
+
+        val gX = x / SensorManager.GRAVITY_EARTH
+        val gY = y / SensorManager.GRAVITY_EARTH
+        val gZ = z / SensorManager.GRAVITY_EARTH
+
+        val gForce = Math.sqrt((gX * gX + gY * gY + gZ * gZ).toDouble()).toFloat()
+
+        if (gForce > SHAKE_THRESHOLD) {
+            val now = System.currentTimeMillis()
+            if (lastShakeTime + SHAKE_COOLDOWN > now) return
+            lastShakeTime = now
+
+            viewModel.updateZonesConfig()
+            Toast.makeText(this, "Shaked! Checking for updates...", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     private fun requestProjection() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
@@ -1069,6 +1178,10 @@ private fun BetterVizApp(
     onHapticMultiplierChanged: (Float) -> Unit,
     hapticGamma: Float,
     onHapticGammaChanged: (Float) -> Unit,
+    idleBreathingEnabled: Boolean,
+    onIdleBreathingEnabledChanged: (Boolean) -> Unit,
+    notificationFlashEnabled: Boolean,
+    onNotificationFlashEnabledChanged: (Boolean) -> Unit,
     selectedDevice: Int,
 ) {
     val autoDeviceEnabled by viewModel.autoDeviceEnabled.collectAsStateWithLifecycle()
@@ -1206,7 +1319,13 @@ private fun BetterVizApp(
                             hapticGamma = hapticGamma,
                             onHapticGammaChanged = onHapticGammaChanged,
                         )
-                        Tab.Settings -> SettingsScreen(viewModel)
+                        Tab.Settings -> SettingsScreen(
+                            viewModel = viewModel,
+                            idleBreathingEnabled = idleBreathingEnabled,
+                            onIdleBreathingEnabledChanged = onIdleBreathingEnabledChanged,
+                            notificationFlashEnabled = notificationFlashEnabled,
+                            onNotificationFlashEnabledChanged = onNotificationFlashEnabledChanged,
+                        )
                         Tab.About -> AboutScreen()
                     }
                 }
