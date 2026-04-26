@@ -854,7 +854,6 @@ private fun BetterVizApp(
     val scope = rememberCoroutineScope()
 
     // ─── Polling: Update Live Preview ────────────────────────────────────────
-    /*
     LaunchedEffect(isRunning) {
         if (isRunning) {
             while (true) {
@@ -867,7 +866,6 @@ private fun BetterVizApp(
             viewModel.updateVisualizerState(floatArrayOf())
         }
     }
-    */
 
     val pagerState = rememberPagerState(
         initialPage = Tabs.indexOf(tab).coerceAtLeast(0),
