@@ -64,8 +64,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.annotation.RequiresPermission
+import androidx.compose.animation.core.EaseOutQuart
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
@@ -643,11 +645,6 @@ private fun AudioDeviceInfo.toAudioRoute(): AudioRoute {
 // Define the static list outside or as a constant to avoid overhead
 private val Tabs = listOf(Tab.Audio, Tab.Glyphs, Tab.Haptics, Tab.Settings, Tab.About)
 
-private val BouncySpringSpec = spring<Float>(
-    dampingRatio = Spring.DampingRatioLowBouncy,
-    stiffness = Spring.StiffnessLow
-)
-
 private val HeavyEasingSpec = tween<Float>(
     durationMillis = 600,
     easing = EaseOutQuart
@@ -727,7 +724,7 @@ private fun BetterVizApp(
                     val index = Tabs.indexOf(targetTab)
                     if (index != -1 && index != pagerState.currentPage) {
                         scope.launch {
-                            pagerState.animateScrollToPage(index, animationSpec = HeavyEasingSpec
+                            pagerState.animateScrollToPage(index, animationSpec = HeavyEasingSpec)
                         }
                     }
                 }

@@ -1,7 +1,8 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 package com.better.nothing.music.vizualizer
 
 import android.content.Context
-import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
@@ -21,12 +22,9 @@ import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -47,29 +45,26 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.Typography
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -278,8 +273,7 @@ fun ExpressiveSlider(
     value: Float,
     onValueChange: (Float) -> Unit,
     valueRange: ClosedFloatingPointRange<Float>,
-    modifier: Modifier = Modifier,
-    enableHaptics: Boolean = false
+    modifier: Modifier = Modifier
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val haptics = LocalHapticFeedback.current
@@ -353,6 +347,91 @@ fun ExpressiveSlider(
         }
     )
 }
+
+@Composable
+fun ExpressiveRangeSlider(
+    value: ClosedFloatingPointRange<Float>,
+    onValueChange: (ClosedFloatingPointRange<Float>) -> Unit,
+    valueRange: ClosedFloatingPointRange<Float>,
+    modifier: Modifier = Modifier
+) {
+    val startInteractionSource = remember { MutableInteractionSource() }
+    val endInteractionSource = remember { MutableInteractionSource() }
+    val haptics = LocalHapticFeedback.current
+
+    val startActive by startInteractionSource.collectIsPressedAsState()
+    val startDragged by startInteractionSource.collectIsDraggedAsState()
+    val endActive by endInteractionSource.collectIsPressedAsState()
+    val endDragged by endInteractionSource.collectIsDraggedAsState()
+
+    val isAnyActive = startActive || startDragged || endActive || endDragged
+
+    // Overall track expansion factor
+    val animationFactor by animateFloatAsState(
+        targetValue = if (isAnyActive) 2.1f else 1.0f,
+        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessLow),
+        label = "track_bloom"
+    )
+
+    // Individual thumb "thinning" factors
+    val startThumbFactor by animateFloatAsState(if (startActive || startDragged) 2.1f else 1.0f)
+    val endThumbFactor by animateFloatAsState(if (endActive || endDragged) 2.1f else 1.0f)
+
+    // Haptics Logic
+    LaunchedEffect(isAnyActive) {
+        if (isAnyActive) {
+            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+        } else {
+            haptics.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+        }
+    }
+
+    RangeSlider(
+        value = value,
+        onValueChange = onValueChange,
+        valueRange = valueRange,
+        startInteractionSource = startInteractionSource,
+        endInteractionSource = endInteractionSource,
+        modifier = modifier.height(64.dp), // Increased height for the bloom
+        startThumb = {
+            ExpressiveThumb(factor = startThumbFactor)
+        },
+        endThumb = {
+            ExpressiveThumb(factor = endThumbFactor)
+        },
+        track = { rangeSliderState ->
+            val trackHeight = 12.dp * animationFactor
+
+            SliderDefaults.Track(
+                rangeSliderState = rangeSliderState,
+                modifier = Modifier.height(trackHeight),
+                thumbTrackGapSize = 4.dp,
+                drawStopIndicator = null, // Cleaner look for expressive style
+                colors = SliderDefaults.colors(
+                    activeTrackColor = MaterialTheme.colorScheme.primary,
+                    inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            )
+        }
+    )
+}
+
+@Composable
+private fun ExpressiveThumb(factor: Float) {
+    // The thumb gets thinner and taller when grabbed
+    val thumbWidth = 4.dp / factor
+    val thumbHeight = 40.dp * (factor * 0.8f).coerceAtLeast(1f)
+
+    Box(
+        modifier = Modifier
+            .size(width = thumbWidth, height = thumbHeight)
+            .background(
+                color = MaterialTheme.colorScheme.primary,
+                shape = RoundedCornerShape(2.dp)
+            )
+    )
+}
+
 val NTypeFontFamily = FontFamily(
     Font(R.font.ntype82)
 )
