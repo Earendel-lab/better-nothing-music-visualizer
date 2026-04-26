@@ -10,21 +10,35 @@ permissions:
 
 jobs:
   Gradle:
-    if: endsWith(github.event.head_commit.message, '*build') && github.actor != 'github-actions[bot]'
+    if: endsWith(github.event.head_commit.message, 'workflow build') && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    # Install Gradle (needed to generate wrapper)
+    - name: Install Gradle
+      run: sudo apt-get update && sudo apt-get install -y gradle
+
+    # Generate wrapper only if missing
+    - name: Ensure Gradle wrapper exists
+      run: |
+        if [ ! -f "gradlew" ]; then
+          echo "Gradle wrapper missing, generating..."
+          gradle wrapper
+        else
+          echo "Gradle wrapper already exists"
+        fi
+
+    - name: Make Gradle executable
+      run: chmod +x ./gradlew
+
     - name: Setup JDK
       uses: actions/setup-java@v4
       with:
         java-version: 11
         distribution: 'temurin'
-
-    - name: Make Gradle executable
-      run: chmod +x ./gradlew
 
     - name: Build Release APK
       run: ./gradlew assembleRelease
