@@ -1,6 +1,6 @@
 # <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Travel%20and%20places/Fire.png" alt="Fire" width="35" height="35" />Better Nothing Music Visualizer
 
-## <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Travel%20and%20places/Globe%20with%20Meridians.png" alt="Globe" width="25" height="25" /> Read this in other languages: 🇹🇷 [Türkçe](README_TR.md)
+## 🌐 Read this in other languages: 🇮🇳 [हिन्दी](README_HI.md) | 🇹🇷 [Türkçe](README_TR.md)
 
 ## <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Smilies/Partying%20Face.png" alt="Partying Face" width="25" height="25" /> The Android App is here!
 We have successfully moved from the simple Python script to a powerful Android app! It grabs the live audio stream from your device using **Media Projection** and processes it directly into the glyphs. This means you can visualize music from **Spotify, YouTube Music**, and basically any other app without manual processing! No more local files only!
