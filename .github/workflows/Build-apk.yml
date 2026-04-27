@@ -17,16 +17,15 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    # Install Gradle (needed to generate wrapper)
-    - name: Install Gradle
-      run: sudo apt-get update && sudo apt-get install -y gradle
-
-    # Generate wrapper only if missing
     - name: Ensure Gradle wrapper exists
       run: |
         if [ ! -f "gradlew" ]; then
           echo "Gradle wrapper missing, generating..."
-          gradle wrapper
+          # Download and unzip Gradle 9.4.1 manually to avoid installing old system versions
+          wget https://services.gradle.org/distributions/gradle-9.4.1-bin.zip
+          unzip -q gradle-9.4.1-bin.zip
+          # Use the downloaded gradle to generate the wrapper
+          ./gradle-9.4.1/bin/gradle wrapper --gradle-version 9.4.1
         else
           echo "Gradle wrapper already exists"
         fi
@@ -37,7 +36,7 @@ jobs:
     - name: Setup JDK
       uses: actions/setup-java@v4
       with:
-        java-version: 11
+        java-version: '17'
         distribution: 'temurin'
 
     - name: Build Release APK
