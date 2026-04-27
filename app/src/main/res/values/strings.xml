@@ -39,6 +39,8 @@
     <string name="more_settings_coming">More settings coming soon...</string>
 
     <!-- Haptics Screen -->
+    <string name="haptics_title">Haptics</string>
+    <string name="haptics_description">Haptics tools will be added here soon. This page is ready for vibration presets, pattern tests, and event-specific feedback settings.</string>
     <string name="haptics_header">Haptics</string>
     <string name="haptics_subtitle">Audio-reactive vibration settings.</string>
     <string name="haptics_motor_title">Audio-Reactive Haptics</string>
@@ -64,7 +66,8 @@
     <string name="glyph_debug_instruction">Run the command once from a computer with ADB, then reopen the app if the Glyphs still do not respond.</string>
 
     <!-- About Screen -->
-    <string name="about_title">About</string>
+    <string name="about_title">About and others</string>
+    <string name="about_description">WE NEED A DAMN PROPER ABOUT SCREEN!! In the meantime please check GitHub for info.</string>
     <string name="about_intro">Better Nothing Music Visualizer unlocks the full potential of the Glyph Interface with high-fidelity, real-time frequency analysis.</string>
     <string name="about_section_why">Why are we better than Nothing\'s implementaion:</string>
     <string name="about_why_1">• 12-bit brightness (4096 levels) vs ~2-bit stock (3 levels)</string>
