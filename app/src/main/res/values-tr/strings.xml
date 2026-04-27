@@ -1,4 +1,46 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Better Nothing Müzik Görselleştirici</string>
+
+    <!-- Audio Screen -->
+    <string name="audio_screen_title">Better Nothing\nMüzik Görselleştirici</string>
+    <string name="audio_description_running">Gerçek zamanlı ses görselleştirici aktif. Telefonunuz artık ritme göre dans ediyor! Hiçbir içerik kaydedilmez ve gizliliğinize saygı duyulur.</string>
+    <string name="audio_description_idle">Bu uygulama Aleks Levet, rKyzen ve Oliver lebaigue tarafından yapılmıştır.\nGlyph Arayüzünü müziğinizle senkronize etmek için bu uygulama cihaz sesini yakalar. Yüksek kaliteli görselleştirme için Medya Yansıtma (Media Projection) kullanıyoruz.\n\nGizlilik Notu: Sadece ses akışını kullanıyoruz. Hiçbir ekran içeriği kaydedilmez.</string>
+    <string name="auto_memorize_device">Cihazı Otomatik Hatırla</string>
+    <string name="saving_latency_for">Gecikme süresi kaydediliyor: %s</string>
+    <string name="internal_speaker">Dahili Hoparlör</string>
+    <string name="manual_mode_global_latency">Manuel mod (Küresel gecikme)</string>
+    <string name="latency_compensation_description">Gecikme telafisi, özellikle Bluetooth cihazları için kullanışlı olan, Gliflerin tam ritimle çalışmasını sağlar.</string>
+    <string name="latency_compensation">Gecikme Telafisi</string>
+
+    <!-- Glyph Screen -->
+    <string name="glyph_controls">Glif kontrolleri</string>
+    <string name="gamma_control">Gama kontrolü</string>
+    <string name="gamma_description">Daha yüksek bir gama değeri daha vurgulu bir görünüm sağlar, ancak daha az ince detay ve genel parlaklık sunar. Daha düşük bir değer ise daha parlak ancak daha az vurguludur.</string>
+    <string name="light_gamma">Işık Gaması: %.2f</string>
+    <string name="visualizer_presets">Görselleştirici hazır ayarları</string>
+
+    <!-- Settings Screen -->
+    <string name="settings_title">Ayarlar</string>
+    <string name="glyph_tab">Glif Sekmesi</string>
+    <string name="glyph_tab_description">Alt gezinme çubuğundan glif kontrolleri sekmesini göster veya gizle.</string>
+    <string name="haptics_tab">Haptik Sekmesi</string>
+    <string name="haptics_tab_description">Alt gezinme çubuğundan haptik araçları sekmesini göster veya gizle.</string>
+    <string name="app_theme">Uygulama Teması</string>
+    <string name="theme_normal">Normal</string>
+    <string name="theme_nothing_red">Nothing Kırmızısı</string>
+    <string name="theme_help_text">Değişiklikler anında uygulanır ve uygulama yeniden başlatıldığında da kalıcı olur.</string>
+    <string name="typography">Tipografi</string>
+    <string name="font_ndot">NDot</string>
+    <string name="font_ntype">NType</string>
+    <string name="typography_help_text">Uygulama genelinde NDot ve NType yazı tipleri arasında geçiş yapın.</string>
+    <string name="more_settings_coming">Daha fazla ayar yakında...</string>
+
+    <!-- Haptics Screen -->
+    <string name="haptics_title">Haptik</string>
+    <string name="haptics_description">Haptik araçları yakında buraya eklenecek. Bu sayfa titreşim ön ayarları, desen testleri ve olaya özel geri bildirim ayarları için hazır.</string>
+    
+    <!-- About Screen -->
+    <string name="about_title">Hakkında ve diğerleri</string>
+    <string name="about_description">DÜZGÜN, LANET BİR HAKKINDA EKRANINA İHTİYACIMIZ VAR!! Bu sırada bilgi için lütfen GitHub'a bakın.</string>
 </resources>
