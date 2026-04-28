@@ -33,9 +33,11 @@ Currently these models are supported:
 - Nothing phone (2a plus)
 - Nothing phone (3a)
 - Nothing phone (3a pro)
-- *Nothing phone (3)* **(beta, not good yet)**
-- *Nothing Phone (4a)*
+- Nothing Phone (4a)
+
+Models not supported yet:
 - *Nothing Phone (4a pro)*
+- *Nothing phone (3)* **(beta, not good yet)**
 
 
 ### <img src="https://fonts.gstatic.com/s/e/notoemoji/latest/2699_fe0f/512.gif" alt="⚙" width="25" height="25"> How it works (technically)
@@ -52,7 +54,7 @@ Currently these models are supported:
 2. **Grant Permissions**: The app needs Screen Capture (Media Projection) and Notification access.
 3. **Start Visualizing**: Hit the "Start" button and play music from any app!
 4. **Adjust Latency**: If the lights aren't perfectly synced with your Bluetooth speaker or headphones, use the **Audio** tab to add or remove delay.
-5. **Change Presets**: Explore different visualization styles in the **Glyphs** tab.
+5. **Change Presets**: Explore different visualization styles in the **Glyphs** tab, and tune the values to your liking!
 
 ## 📖 How to use the python script?
 The usage is pretty simple and straightforward. Nevertheless, we made a detailed wiki page which explains the installation, usage, configuration files in detail and a troubleshooting section. You can also find out how to make new presets(not yet tho). [Just click here to see how to use **musicViz.py** as a python script](https://github.com/Aleks-Levet/better-nothing-music-visualizer/wiki/). You know what's cool? You can convert an unlimited number of files in bulk without any trouble!
