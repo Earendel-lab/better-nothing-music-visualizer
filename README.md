@@ -2,7 +2,7 @@
 <img 
   src="https://img.shields.io/github/downloads/Aleks-Levet/better-nothing-music-visualizer/total?style=for-the-badge&logo=github&label=Total%20app%20downloads%20from%20github:&color=ff0000&labelColor=000000"
   style="height:40px; border-radius:12px;">
-## 🌐 Read this in other languages: 🇮🇳 [हिन्दी](README_HI.md) [Marathi](README-MR.md) | 🇹🇷 [Türkçe](README_TR.md)
+## 🌐 Read this in other languages: 🇮🇳 [हिन्दी](README_HI.md) | 🇮🇳 [Marathi](README-MR.md) | 🇹🇷 [Türkçe](README_TR.md)
 
 ## <img src="https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Smilies/Partying%20Face.png" alt="Partying Face" width="25" height="25" /> The Android App is here!
 We have successfully moved from the simple Python script to a powerful Android app! It grabs the live audio stream from your device using **Media Projection** and processes it directly into the glyphs. This means you can visualize music from **Spotify, YouTube Music**, and basically any other app without manual processing! No more local files only!
