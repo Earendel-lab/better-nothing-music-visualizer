@@ -22,7 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.PathParser
@@ -336,13 +336,54 @@ fun GlyphPreview(
                             scale(1.03f, 1.03f, pivot = Offset.Zero)
                         }) {
                             paths["p3a_0-19"]?.let {
-                                drawPathRingSegments(this, it, color, (0..19).toList(), smoothedState.value, baseOpacity)
+                                drawPathRingSegmentsWithGradient(this, it, color, (0..19).toList(), smoothedState.value, baseOpacity,
+                                    Brush.linearGradient(
+                                        colors = listOf(
+                                            color.copy(alpha = 0f),
+                                            color.copy(alpha = 0.1f),
+                                            color.copy(alpha = 0.1f),
+                                            color.copy(alpha = 0.1f),
+                                            color.copy(alpha = 0f)
+                                        ),
+                                        stops = listOf(0.0f, 0.25f, 0.5f, 0.75f, 1.0f),
+                                        start = Offset(80f, 100f),
+                                        end = Offset(15f, 0f)
+                                    ))
                             }
                             paths["p3a_20-30"]?.let {
-                                drawPathRingSegments(this, it, color, (20..30).toList(), smoothedState.value, baseOpacity)
+                                drawPathRingSegmentsWithGradient(this, it, color, (20..30).toList(), smoothedState.value, baseOpacity,
+                                    Brush.linearGradient(
+                                        colors = listOf(
+                                            color.copy(alpha = 0f),
+                                            color.copy(alpha = 0.1f),
+                                            color.copy(alpha = 0.1f),
+                                            color.copy(alpha = 0.1f),
+                                            color.copy(alpha = 0.1f),
+                                            color.copy(alpha = 0.1f),
+                                            color.copy(alpha = 0.1f),
+                                            color.copy(alpha = 0.1f),
+                                            color.copy(alpha = 0.1f),
+                                            color.copy(alpha = 0.1f),
+                                            color.copy(alpha = 0f)
+                                        ),
+                                        stops = listOf(0.0f, 0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f, 1.0f),
+                                        start = Offset(55f, 0f),
+                                        end = Offset(50f, 100f)
+                                    ))
                             }
                             paths["p3a_31-35"]?.let {
-                                drawPathRingSegments(this, it, color, (31..35).toList(), smoothedState.value, baseOpacity)
+                                val gradientColors = (0..19).map { pos ->
+                                    val position = pos / 19f
+                                    color.copy(alpha = if (position < 0.1f || position > 0.9f) 0f else 0.1f)
+                                }
+                                val gradientStops = (0..19).map { it / 19f }
+                                drawPathRingSegmentsWithGradient(this, it, color, (31..35).toList(), smoothedState.value, baseOpacity,
+                                    Brush.linearGradient(
+                                        colors = gradientColors,
+                                        stops = gradientStops,
+                                        start = Offset(15f, 100f),
+                                        end = Offset(85f, 0f)
+                                    ))
                             }
                         }
                     }
@@ -371,7 +412,41 @@ private fun drawPathRingSegments(scope: DrawScope, path: Path, color: Color, ind
         }
     }
 }
-
+private fun drawPathRingSegmentsWithGradient(scope: DrawScope, path: Path, color: Color, indices: List<Int>, state: FloatArray, baseOpacity: Float, baseGradient: Brush) {
+    val b = path.getBounds()
+    val count = indices.size
+    val centerX = b.left + b.width/2
+    val sliceH = b.height / (count / 2)
+    indices.forEachIndexed { i, idx ->
+        val alpha = baseOpacity + (state.getOrElse(idx) { 0f } * (1f - baseOpacity))
+        val isR = i >= count / 2
+        val row = if (isR) i - (count / 2) else i
+        scope.clipRect(
+            left = if (isR) centerX else 0f,
+            top = b.top + row * sliceH,
+            right = if (isR) 182f else centerX,
+            bottom = b.top + (row + 1) * sliceH
+        ) {
+            // Create a modulated gradient by scaling all alphas
+            val modulatedGradient = when (baseGradient) {
+                is Brush.LinearGradient -> {
+                    val modulatedColors = baseGradient.colors.map { it.copy(alpha = it.alpha * alpha) }
+                    Brush.linearGradient(
+                        colors = modulatedColors,
+                        stops = baseGradient.stops,
+                        start = baseGradient.start,
+                        end = baseGradient.end,
+                        tileMode = baseGradient.tileMode
+                    )
+                }
+                else -> baseGradient
+            }
+                else -> baseGradient
+            }
+            scope.drawPath(path, modulatedGradient)
+        }
+    }
+}
 private fun drawPathVerticalSegments(scope: DrawScope, path: Path, color: Color, range: IntRange, state: FloatArray, baseOpacity: Float) {
     val b = path.getBounds()
     val count = range.last - range.first + 1
