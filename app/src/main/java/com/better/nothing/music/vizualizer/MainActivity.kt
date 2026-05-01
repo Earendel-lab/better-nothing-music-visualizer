@@ -146,6 +146,45 @@ internal class MainViewModel(application: Application) : AndroidViewModel(applic
     // read the latest device synchronously when binding the service.
     val selectedDevice = MutableStateFlow(DeviceProfile.DEVICE_NP2)
 
+    private val _developerModeEnabled = MutableStateFlow(false)
+    val developerModeEnabled = _developerModeEnabled.asStateFlow()
+
+    private val _spoofedDevice = MutableStateFlow(DeviceProfile.DEVICE_NP1)
+    val spoofedDevice = _spoofedDevice.asStateFlow()
+
+    fun setDeveloperModeEnabled(enabled: Boolean) {
+        _developerModeEnabled.value = enabled
+        updateSelectedDevice()
+        viewModelScope.launch(Dispatchers.IO) {
+            ctx.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
+                .edit { putBoolean("developer_mode_enabled", enabled) }
+        }
+    }
+
+    fun setSpoofedDevice(device: Int) {
+        _spoofedDevice.value = device
+        if (_developerModeEnabled.value) {
+            updateSelectedDevice()
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            ctx.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
+                .edit { putInt("spoofed_device", device) }
+        }
+    }
+
+    private fun updateSelectedDevice() {
+        val actualDevice = DeviceProfile.detectDevice()
+        val targetDevice = if (_developerModeEnabled.value) _spoofedDevice.value else actualDevice
+        
+        if (selectedDevice.value != targetDevice) {
+            selectedDevice.value = targetDevice
+            refreshPresets()
+            reloadLatencyForCurrentRoute()
+            // Forward to service if bound
+            MainActivity.serviceStatic?.setDevice(targetDevice)
+        }
+    }
+
     // ── Latency ───────────────────────────────────────────────────────────────
     private val _latencyMs = MutableStateFlow(0)
     val latencyMs = _latencyMs.asStateFlow()
@@ -403,7 +442,13 @@ internal class MainViewModel(application: Application) : AndroidViewModel(applic
     init {
         // Run EVERYTHING heavy off-thread immediately
         viewModelScope.launch(Dispatchers.Default) {
-            val device = DeviceProfile.detectDevice()
+            val prefs = ctx.getSharedPreferences("viz_prefs", Context.MODE_PRIVATE)
+            
+            _developerModeEnabled.value = prefs.getBoolean("developer_mode_enabled", false)
+            _spoofedDevice.value = prefs.getInt("spoofed_device", DeviceProfile.DEVICE_NP1)
+
+            val actualDevice = DeviceProfile.detectDevice()
+            val device = if (_developerModeEnabled.value) _spoofedDevice.value else actualDevice
             selectedDevice.value = device
 
             // Load I/O in parallel using IO dispatcher

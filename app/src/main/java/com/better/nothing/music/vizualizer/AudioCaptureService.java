@@ -1572,6 +1572,7 @@ public class AudioCaptureService extends Service {
             case DeviceProfile.DEVICE_NP2A -> PHONE_MODEL_PHONE2A;
             case DeviceProfile.DEVICE_NP3A -> PHONE_MODEL_PHONE3A;
             case DeviceProfile.DEVICE_NP4A -> PHONE_MODEL_PHONE4A;
+            case DeviceProfile.DEVICE_NP3 -> PHONE_MODEL_PHONE3;
             default -> PHONE_MODEL_UNKNOWN;
         };
     }

@@ -6,6 +6,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -57,6 +58,7 @@ import androidx.compose.foundation.layout.size
 
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SettingsScreen(
     viewModel: MainViewModel,
@@ -131,6 +133,10 @@ internal fun SettingsScreen(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 modifier = Modifier.fillMaxWidth(),
             ) {
+                val devModeEnabled by viewModel.developerModeEnabled.collectAsStateWithLifecycle()
+                val spoofedDevice by viewModel.spoofedDevice.collectAsStateWithLifecycle()
+                var spoofExpanded by remember { mutableStateOf(false) }
+
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     FeatureToggle(
                         title = stringResource(R.string.idle_breathing_title),
@@ -147,6 +153,74 @@ internal fun SettingsScreen(
                         checked = notificationFlashEnabled,
                         onCheckedChange = onNotificationFlashEnabledChanged
                     )
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
+
+                    FeatureToggle(
+                        title = stringResource(R.string.developer_mode),
+                        description = stringResource(R.string.developer_mode_description),
+                        checked = devModeEnabled,
+                        onCheckedChange = { viewModel.setDeveloperModeEnabled(it) }
+                    )
+
+                    if (devModeEnabled) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
+
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                text = stringResource(R.string.spoof_device),
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            
+                            Box {
+                                OutlinedTextField(
+                                    value = DeviceProfile.deviceName(spoofedDevice),
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = spoofExpanded) },
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+                                // Transparent overlay for clickable box logic since OutlinedTextField is readOnly
+                                Box(
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                        .background(Color.Transparent)
+                                        .clickable { spoofExpanded = true }
+                                )
+                                
+                                DropdownMenu(
+                                    expanded = spoofExpanded,
+                                    onDismissRequest = { spoofExpanded = false },
+                                    modifier = Modifier.fillMaxWidth(0.9f)
+                                ) {
+                                    val devices = listOf(
+                                        DeviceProfile.DEVICE_NP1,
+                                        DeviceProfile.DEVICE_NP2,
+                                        DeviceProfile.DEVICE_NP2A,
+                                        DeviceProfile.DEVICE_NP3A,
+                                        DeviceProfile.DEVICE_NP4A,
+                                        DeviceProfile.DEVICE_NP3
+                                    )
+                                    devices.forEach { dev ->
+                                        DropdownMenuItem(
+                                            text = { Text(DeviceProfile.deviceName(dev)) },
+                                            onClick = {
+                                                viewModel.setSpoofedDevice(dev)
+                                                spoofExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                            Text(
+                                text = stringResource(R.string.spoof_device_description),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray
+                            )
+                        }
+                    }
                 }
             }
             
