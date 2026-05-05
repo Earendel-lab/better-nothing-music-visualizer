@@ -84,7 +84,7 @@ https://www.virustotal.com/gui/url/c92c1ff82b56eb60bfd1e159592d09f949f0ea2d195e0
 - [rKyzen(a.k.a Shivank Dan)](https://github.com/rKyzen)(Android App developer with real time music stream)
 - [Oliver Lebaigue](https://github.com/oliver-lebaigue-bright-bench) (Developer)
 - [SebiAi](https://github.com/SebiAi) (Glyphmodder and glyph related help)
-- [Earnedel-lab](https://github.com/Earendel-lab) (Readme enhancements)
+- [Earendel](https://github.com/Earendel-lab) (Readme enhancements)
 - [あけ なるかみ](https://github.com/Luke20YT) (Dev making a Music app with an integration with this script)
 - [Interlastic](https://github.com/Interlastic) (Discord Bot to try the script easily) (deprecated)
 
